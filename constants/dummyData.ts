@@ -1,0 +1,336 @@
+export interface Disease {
+  id: string;
+  name: string;
+  description: string;
+  severity: 'Mild' | 'Moderate' | 'Severe';
+  precautions: string[];
+  routineTasks: string[];
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  image: string;
+  category: string;
+}
+
+export const ADMIN_EMAIL = 'admin@pentasent.com';
+export const ADMIN_PASSWORD = 'PentasentAdmin2026!';
+
+export const diseases: Disease[] = [
+  {
+    id: '1',
+    name: 'Acne Vulgaris',
+    description: 'Common inflammatory skin condition characterized by pimples, blackheads, and whiteheads. Often affects the face, chest, and back areas. Usually caused by excess oil production and bacteria.',
+    severity: 'Moderate',
+    precautions: [
+      'Wash your face twice daily with gentle cleanser',
+      'Avoid touching or picking at affected areas',
+      'Use oil-free, non-comedogenic products',
+      'Keep hair clean and away from face',
+      'Avoid excessive sun exposure',
+      'Stay hydrated and maintain healthy diet',
+    ],
+    routineTasks: [
+      'Morning: Cleanse face with gentle cleanser',
+      'Morning: Apply oil-free moisturizer',
+      'Morning: Use sunscreen SPF 30+',
+      'Evening: Remove makeup completely',
+      'Evening: Cleanse face thoroughly',
+      'Evening: Apply acne spot treatment',
+      'Night: Use non-comedogenic night cream',
+    ],
+  },
+  {
+    id: '2',
+    name: 'Eczema (Atopic Dermatitis)',
+    description: 'Chronic inflammatory condition causing dry, itchy, and inflamed skin patches. Can appear anywhere on the body but commonly affects hands, feet, and face. Often triggered by allergens or stress.',
+    severity: 'Moderate',
+    precautions: [
+      'Moisturize skin regularly throughout the day',
+      'Avoid hot showers and baths',
+      'Use fragrance-free products only',
+      'Wear soft, breathable fabrics',
+      'Identify and avoid triggers',
+      'Keep nails short to prevent scratching damage',
+    ],
+    routineTasks: [
+      'Morning: Apply thick moisturizer to affected areas',
+      'Morning: Use prescribed topical treatment',
+      'Midday: Reapply moisturizer as needed',
+      'Evening: Take lukewarm bath with colloidal oatmeal',
+      'Evening: Pat skin dry gently',
+      'Evening: Apply heavy-duty moisturizer',
+      'Night: Use prescribed ointment on patches',
+    ],
+  },
+  {
+    id: '3',
+    name: 'Rosacea',
+    description: 'Chronic skin condition causing facial redness, visible blood vessels, and sometimes small red bumps. Primarily affects cheeks, nose, chin, and forehead. Can be triggered by heat, spicy foods, or alcohol.',
+    severity: 'Mild',
+    precautions: [
+      'Avoid hot beverages and spicy foods',
+      'Use gentle, non-irritating skincare',
+      'Protect skin from extreme temperatures',
+      'Avoid alcohol-based products',
+      'Apply sunscreen daily without fail',
+      'Keep stress levels under control',
+    ],
+    routineTasks: [
+      'Morning: Cleanse with gentle, cool water',
+      'Morning: Apply calming serum',
+      'Morning: Use mineral-based sunscreen',
+      'Midday: Avoid sun exposure between 10am-4pm',
+      'Evening: Remove products with micellar water',
+      'Evening: Apply anti-redness cream',
+      'Night: Use prescribed medication if any',
+    ],
+  },
+  {
+    id: '4',
+    name: 'Psoriasis',
+    description: 'Autoimmune condition causing rapid skin cell buildup, forming scales and red patches that may be itchy or painful. Commonly appears on elbows, knees, scalp, and lower back.',
+    severity: 'Moderate',
+    precautions: [
+      'Keep skin well moisturized at all times',
+      'Avoid skin injuries and trauma',
+      'Reduce stress through relaxation techniques',
+      'Limit alcohol consumption',
+      'Get moderate sun exposure safely',
+      'Use prescribed medications consistently',
+    ],
+    routineTasks: [
+      'Morning: Apply medicated cream to patches',
+      'Morning: Moisturize entire body',
+      'Morning: Take prescribed medication',
+      'Afternoon: Get 10-15 minutes sunlight',
+      'Evening: Soak in lukewarm water',
+      'Evening: Gently remove scales',
+      'Night: Apply thick moisturizer or ointment',
+    ],
+  },
+  {
+    id: '5',
+    name: 'Melasma',
+    description: 'Hyperpigmentation condition causing brown or gray-brown patches on the face, particularly on cheeks, forehead, and upper lip. Often triggered by sun exposure and hormonal changes.',
+    severity: 'Mild',
+    precautions: [
+      'Apply broad-spectrum sunscreen daily',
+      'Wear wide-brimmed hat outdoors',
+      'Avoid direct sun exposure',
+      'Use gentle skincare products',
+      'Avoid waxing affected areas',
+      'Consider hormonal factors with doctor',
+    ],
+    routineTasks: [
+      'Morning: Cleanse with gentle cleanser',
+      'Morning: Apply vitamin C serum',
+      'Morning: Use SPF 50+ sunscreen',
+      'Midday: Reapply sunscreen every 2 hours',
+      'Evening: Cleanse thoroughly',
+      'Evening: Apply brightening serum',
+      'Night: Use prescribed lightening cream',
+    ],
+  },
+  {
+    id: '6',
+    name: 'Contact Dermatitis',
+    description: 'Allergic or irritant reaction causing red, itchy rash when skin contacts certain substances. Can be caused by soaps, cosmetics, jewelry, or plants like poison ivy.',
+    severity: 'Mild',
+    precautions: [
+      'Identify and avoid triggering substances',
+      'Wear protective gloves when necessary',
+      'Use hypoallergenic products',
+      'Wash affected area immediately after contact',
+      'Keep skin moisturized',
+      'Avoid scratching irritated areas',
+    ],
+    routineTasks: [
+      'Morning: Cleanse with fragrance-free wash',
+      'Morning: Apply barrier cream',
+      'Morning: Take antihistamine if prescribed',
+      'Midday: Avoid known allergens',
+      'Evening: Wash hands frequently',
+      'Evening: Apply cool compress to rash',
+      'Night: Use prescribed topical steroid',
+    ],
+  },
+  {
+    id: '7',
+    name: 'Seborrheic Dermatitis',
+    description: 'Common condition causing scaly patches, red skin, and stubborn dandruff. Mainly affects oily areas like scalp, face, and upper chest. Can be chronic and require ongoing management.',
+    severity: 'Mild',
+    precautions: [
+      'Wash affected areas regularly',
+      'Use medicated shampoos as directed',
+      'Avoid harsh soaps and detergents',
+      'Manage stress levels',
+      'Get adequate sleep',
+      'Maintain good hygiene',
+    ],
+    routineTasks: [
+      'Morning: Cleanse face with medicated wash',
+      'Morning: Apply antifungal cream',
+      'Morning: Moisturize lightly',
+      'Midday: Wash hair with medicated shampoo',
+      'Evening: Cleanse affected areas',
+      'Evening: Apply prescribed treatment',
+      'Night: Use gentle moisturizer',
+    ],
+  },
+  {
+    id: '8',
+    name: 'Sun Damage (Photoaging)',
+    description: 'Premature skin aging caused by UV radiation exposure, resulting in wrinkles, age spots, rough texture, and loss of elasticity. Can increase risk of skin cancer.',
+    severity: 'Moderate',
+    precautions: [
+      'Apply sunscreen daily, even on cloudy days',
+      'Seek shade during peak sun hours',
+      'Wear protective clothing outdoors',
+      'Use sunglasses with UV protection',
+      'Avoid tanning beds completely',
+      'Get regular skin cancer screenings',
+    ],
+    routineTasks: [
+      'Morning: Apply antioxidant serum',
+      'Morning: Use broad-spectrum SPF 50+',
+      'Morning: Apply to all exposed areas',
+      'Midday: Reapply sunscreen every 2 hours',
+      'Evening: Cleanse and remove sunscreen',
+      'Evening: Apply retinol or vitamin A',
+      'Night: Use rich moisturizer with peptides',
+    ],
+  },
+  {
+    id: '9',
+    name: 'Dry Skin (Xerosis)',
+    description: 'Common condition characterized by rough, flaky, or scaly skin that may crack or itch. Can be caused by weather, hot showers, harsh soaps, or underlying conditions.',
+    severity: 'Mild',
+    precautions: [
+      'Use gentle, fragrance-free cleansers',
+      'Take shorter, lukewarm showers',
+      'Moisturize immediately after bathing',
+      'Use a humidifier in dry environments',
+      'Drink plenty of water',
+      'Avoid harsh exfoliants',
+    ],
+    routineTasks: [
+      'Morning: Apply rich moisturizer',
+      'Morning: Use hydrating serum',
+      'Morning: Apply lip balm',
+      'Midday: Reapply hand cream',
+      'Evening: Take short lukewarm shower',
+      'Evening: Pat dry and moisturize immediately',
+      'Night: Apply overnight hydrating mask',
+    ],
+  },
+  {
+    id: '10',
+    name: 'Fungal Infection (Tinea)',
+    description: 'Contagious skin infection caused by fungi, appearing as red, itchy, circular rashes with clearer skin in the middle. Common types include ringworm, athlete\'s foot, and jock itch.',
+    severity: 'Mild',
+    precautions: [
+      'Keep affected areas clean and dry',
+      'Avoid sharing personal items',
+      'Wear breathable, loose-fitting clothes',
+      'Change socks and underwear daily',
+      'Use antifungal powder in shoes',
+      'Complete full course of treatment',
+    ],
+    routineTasks: [
+      'Morning: Wash affected area with soap',
+      'Morning: Apply antifungal cream',
+      'Morning: Wear clean, dry clothing',
+      'Midday: Keep area dry and aired',
+      'Evening: Wash and dry thoroughly',
+      'Evening: Apply antifungal medication',
+      'Night: Wear breathable fabrics',
+    ],
+  },
+];
+
+export const products: Product[] = [
+  {
+    id: 'p1',
+    name: 'Gentle Daily Cleanser',
+    description: 'pH-balanced, soap-free cleanser for all skin types. Removes impurities without stripping natural oils.',
+    price: 24.99,
+    image: 'https://images.pexels.com/photos/4041392/pexels-photo-4041392.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Cleanser',
+  },
+  {
+    id: 'p2',
+    name: 'Hydrating Facial Serum',
+    description: 'Hyaluronic acid serum that deeply hydrates and plumps skin. Suitable for all skin types.',
+    price: 39.99,
+    image: 'https://images.pexels.com/photos/3762879/pexels-photo-3762879.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Serum',
+  },
+  {
+    id: 'p3',
+    name: 'Mineral Sunscreen SPF 50',
+    description: 'Broad-spectrum protection with zinc oxide. Non-greasy, reef-safe formula.',
+    price: 32.99,
+    image: 'https://images.pexels.com/photos/7775635/pexels-photo-7775635.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Sunscreen',
+  },
+  {
+    id: 'p4',
+    name: 'Nourishing Night Cream',
+    description: 'Rich moisturizer with ceramides and peptides. Repairs and rejuvenates overnight.',
+    price: 44.99,
+    image: 'https://images.pexels.com/photos/3685530/pexels-photo-3685530.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Moisturizer',
+  },
+  {
+    id: 'p5',
+    name: 'Vitamin C Brightening Serum',
+    description: 'Powerful antioxidant serum that brightens and evens skin tone. Reduces dark spots.',
+    price: 48.99,
+    image: 'https://images.pexels.com/photos/7428100/pexels-photo-7428100.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Serum',
+  },
+  {
+    id: 'p6',
+    name: 'Exfoliating Toner',
+    description: 'Gentle AHA/BHA toner that removes dead skin cells. Refines pores and improves texture.',
+    price: 28.99,
+    image: 'https://images.pexels.com/photos/4202461/pexels-photo-4202461.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Toner',
+  },
+  {
+    id: 'p7',
+    name: 'Calming Face Mask',
+    description: 'Soothing clay mask with aloe and chamomile. Reduces redness and inflammation.',
+    price: 26.99,
+    image: 'https://images.pexels.com/photos/3762882/pexels-photo-3762882.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Mask',
+  },
+  {
+    id: 'p8',
+    name: 'Retinol Night Treatment',
+    description: 'Anti-aging treatment with time-released retinol. Reduces fine lines and wrinkles.',
+    price: 54.99,
+    image: 'https://images.pexels.com/photos/4041392/pexels-photo-4041392.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Treatment',
+  },
+  {
+    id: 'p9',
+    name: 'Eye Cream Complex',
+    description: 'Lightweight eye cream targeting dark circles and puffiness. With caffeine and peptides.',
+    price: 36.99,
+    image: 'https://images.pexels.com/photos/3685538/pexels-photo-3685538.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Eye Care',
+  },
+  {
+    id: 'p10',
+    name: 'Lip Repair Balm',
+    description: 'Intensive lip treatment with shea butter and vitamin E. Heals and protects dry lips.',
+    price: 14.99,
+    image: 'https://images.pexels.com/photos/3735656/pexels-photo-3735656.jpeg?auto=compress&cs=tinysrgb&w=400',
+    category: 'Lip Care',
+  },
+];
