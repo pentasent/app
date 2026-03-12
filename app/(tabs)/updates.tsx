@@ -176,9 +176,9 @@ const styles = StyleSheet.create({
         gap: spacing.md,
     },
     markReadBtn: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: borderRadius.md,
+        paddingVertical: 7,
+        paddingHorizontal: 14,
+        borderRadius: borderRadius.full,
         backgroundColor: colors.primaryLight + "40",
     },
     markReadText: {
@@ -190,6 +190,7 @@ const styles = StyleSheet.create({
         flex: 1,
         // paddingHorizontal: spacing.md,
         paddingTop: spacing.md,
+        marginBottom: spacing.lg
     },
     emptyState: {
         flex: 1,

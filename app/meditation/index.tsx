@@ -1,6 +1,5 @@
-import { CustomImage as Image } from '@/components/CustomImage';
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, FlatList } from 'react-native';
+import { Image as RNImage, View, Text, StyleSheet, TouchableOpacity, Dimensions, FlatList, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAudioPlayer } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +8,8 @@ import { ArrowLeft, Play, Pause, Volume2, VolumeX, Clock } from 'lucide-react-na
 import { colors, spacing } from '../../constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../../lib/supabase';
+import { Meditation } from '../../types/database';
 
 const { width } = Dimensions.get('window');
 
@@ -23,33 +24,6 @@ type SoundOption = {
     image: string;
 };
 
-const SOUNDS: SoundOption[] = [
-    {
-        id: '1',
-        title: 'Rain',
-        uri: 'https://assets.mixkit.co/active_storage/sfx/2432/2432-preview.mp3',
-        image: 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=400&q=80',
-    },
-    {
-        id: '2',
-        title: 'Zen',
-        uri: 'https://assets.mixkit.co/active_storage/sfx/619/619-preview.mp3',
-        image: 'https://images.unsplash.com/photo-1600618528240-fb9fc964b853?w=400&q=80',
-    },
-    {
-        id: '3',
-        title: 'Forest',
-        uri: 'https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3',
-        image: 'https://images.unsplash.com/photo-1448375240586-dfd8d395ea6c?w=400&q=80',
-    },
-    {
-        id: '4',
-        title: 'Ocean',
-        uri: 'https://assets.mixkit.co/active_storage/sfx/1101/1101-preview.mp3',
-        image: 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=400&q=80',
-    }
-];
-
 const TIMERS = [
     { label: '10m', value: 10 * 60 },
     { label: '30m', value: 30 * 60 },
@@ -58,10 +32,12 @@ const TIMERS = [
 
 export default function MeditationScreen() {
     const router = useRouter();
-    const [selectedSound, setSelectedSound] = useState<SoundOption>(SOUNDS[1]);
-    const [isPlaying, setIsPlaying] = useState(true);
+    const [sounds, setSounds] = useState<SoundOption[]>([]);
+    const [selectedSound, setSelectedSound] = useState<SoundOption | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [breathText, setBreathText] = useState("Inhale");
+    const [isLoading, setIsLoading] = useState(true);
 
     // Timer State
     const [timerValue, setTimerValue] = useState<number>(TIMERS[0].value);
@@ -73,11 +49,72 @@ export default function MeditationScreen() {
 
     const breathIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+    // --- Fetch Sounds ---
+    useEffect(() => {
+        const fetchSounds = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('meditation')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error('Error fetching meditation sounds:', error);
+                    return;
+                }
+
+                if (data && data.length > 0) {
+                    const mappedSounds: SoundOption[] = data.map((item: Meditation) => ({
+                        id: item.id,
+                        title: item.title,
+                        uri: item.audio_url,
+                        image: item.banner_url || 'https://api.pentasent.com/storage/v1/object/public/avatars/placeholders/meditation_background.png',
+                    }));
+                    setSounds(mappedSounds);
+                    setSelectedSound(mappedSounds[0]);
+                }
+            } catch (err) {
+                console.error('Unexpected error fetching sounds:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchSounds();
+    }, []);
+
+    const incrementPlayCount = async (soundId: string) => {
+        try {
+            // First fetch current count to increment safely without rpc
+            const { data, error } = await supabase
+                .from('meditation')
+                .select('play_count')
+                .eq('id', soundId)
+                .single();
+
+            if (error) throw error;
+
+            await supabase
+                .from('meditation')
+                .update({ play_count: (data?.play_count || 0) + 1 })
+                .eq('id', soundId);
+        } catch (error) {
+            console.error('Error increasing play count', error);
+        }
+    };
+
+    const handlePlayPause = () => {
+        if (!isPlaying && selectedSound) {
+            incrementPlayCount(selectedSound.id);
+        }
+        setIsPlaying(!isPlaying);
+    };
+
     // --- Audio Logic (expo-audio) ---
-    const player = useAudioPlayer(selectedSound.uri);
+    const player = useAudioPlayer(selectedSound?.uri || null);
 
     useEffect(() => {
-        if (player) {
+        if (player && selectedSound) {
             player.loop = true;
             player.volume = isMuted ? 0 : 1.0;
             player.muted = isMuted; // Try explicit muted property if available
@@ -184,8 +221,8 @@ export default function MeditationScreen() {
         <View style={styles.container}>
             <StatusBar style="light" />
             <View style={styles.backgroundContainer}>
-                <Image
-                    source={{ uri: 'https://images.unsplash.com/photo-1528319725582-ddc096101511?w=800&q=80' }}
+                <RNImage
+                    source={{ uri: 'https://api.pentasent.com/storage/v1/object/public/avatars/placeholders/meditation_background.png' }}
                     style={styles.backgroundImage}
                     resizeMode="cover"
                 />
@@ -256,7 +293,7 @@ export default function MeditationScreen() {
                         </TouchableOpacity>
 
                         {/* Play/Pause Main */}
-                        <TouchableOpacity onPress={() => setIsPlaying(!isPlaying)} style={styles.playBtn}>
+                        <TouchableOpacity onPress={handlePlayPause} style={styles.playBtn}>
                             {isPlaying ? (
                                 <Pause size={32} color="black" fill="black" />
                             ) : (
@@ -269,40 +306,110 @@ export default function MeditationScreen() {
 
                     {/* Sound Selector */}
                     <View style={styles.soundSelector}>
-                        <FlatList
-                            data={SOUNDS}
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            keyExtractor={item => item.id}
-                            extraData={selectedSound}
-                            removeClippedSubviews={false}
-                            contentContainerStyle={{ paddingHorizontal: spacing.lg }}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={[
-                                        styles.soundCard,
-                                        selectedSound.id === item.id && styles.soundCardActive
-                                    ]}
-                                    activeOpacity={0.7}
-                                    onPress={() => setSelectedSound(item)}
-                                >
-                                    <Image
-                                        source={{ uri: item.image }}
-                                        style={styles.soundCardImage}
-                                        resizeMode="cover"
-                                    />
-                                    <View style={[
-                                        styles.soundOverlay,
-                                        selectedSound.id === item.id && { backgroundColor: 'rgba(79, 70, 229, 0.4)' }
-                                    ]}>
-                                        {selectedSound.id === item.id && (
-                                            <View style={styles.playingIndicator} />
-                                        )}
-                                        <Text style={styles.soundTitle}>{item.title}</Text>
+                        {isLoading ? (
+                            <View style={{ flexDirection: 'row', paddingHorizontal: spacing.lg }}>
+                                {[1, 2, 3, 4].map((key) => (
+                                    <View key={key} style={[styles.soundCard, { backgroundColor: 'transparent' }]}>
+                                        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.1)' }]} />
                                     </View>
-                                </TouchableOpacity>
-                            )}
-                        />
+                                ))}
+                            </View>
+                        ) : (
+                            <FlatList
+    data={sounds}
+    horizontal
+    showsHorizontalScrollIndicator={false}
+    keyExtractor={(item) => item.id}
+    extraData={selectedSound?.id}
+    initialNumToRender={sounds.length}
+    windowSize={7}
+    contentContainerStyle={{ paddingHorizontal: spacing.lg }}
+    renderItem={({ item }) => {
+        const isActive = selectedSound?.id === item.id;
+
+        return (
+            <TouchableOpacity
+                key={`sound-${item.id}-${isActive}`}
+                style={[
+                    styles.soundCard,
+                    isActive && styles.soundCardActive
+                ]}
+                activeOpacity={0.7}
+                onPress={() => {
+                    if (selectedSound?.id !== item.id) {
+                        setSelectedSound(item);
+                        setIsPlaying(true);
+                        incrementPlayCount(item.id);
+                    }
+                }}
+            >
+                <RNImage
+                    source={{ uri: item.image }}
+                    style={styles.soundCardImage}
+                    resizeMode="cover"
+                />
+
+                <View
+                    style={[
+                        styles.soundOverlay,
+                        isActive && {
+                            backgroundColor: 'rgba(79, 70, 229, 0.4)'
+                        }
+                    ]}
+                >
+                    {isActive && (
+                        <View style={styles.playingIndicator} />
+                    )}
+
+                    <Text style={styles.soundTitle}>
+                        {item.title}
+                    </Text>
+                </View>
+            </TouchableOpacity>
+        );
+    }}
+/>
+                            // <FlatList
+                            //     data={sounds}
+                            //     horizontal
+                            //     showsHorizontalScrollIndicator={false}
+                            //     keyExtractor={item => item.id}
+                            //     extraData={selectedSound?.id}
+                            //     removeClippedSubviews={false}
+                            //     contentContainerStyle={{ paddingHorizontal: spacing.lg }}
+                            //     renderItem={({ item }) => (
+                            //         <TouchableOpacity
+                            //             style={[
+                            //                 styles.soundCard,
+                            //                 selectedSound?.id === item.id && styles.soundCardActive
+                            //             ]}
+                            //             activeOpacity={0.7}
+                            //             onPress={() => {
+                            //                 if (selectedSound?.id !== item.id) {
+                            //                     setSelectedSound(item);
+                            //                     setIsPlaying(true);
+                            //                     incrementPlayCount(item.id);
+                            //                 }
+                            //             }}
+                            //         >
+                            //             <RNImage
+                            //                 source={{ uri: item.image }}
+                            //                 style={styles.soundCardImage}
+                            //                 resizeMode="cover"
+                            //             />
+                            //             <View style={[
+                            //                 styles.soundOverlay,
+                            //                 selectedSound?.id === item.id && { backgroundColor: 'rgba(79, 70, 229, 0.4)' }
+                            //             ]}>
+                            //                 {selectedSound?.id === item.id && (
+                            //                     <View style={styles.playingIndicator} />
+                            //                 )}
+                            //                 <Text style={styles.soundTitle}>{item.title}</Text>
+                            //             </View>
+                            //         </TouchableOpacity>
+                            //     )}
+                            // />
+                        )}
                     </View>
 
                 </View>
@@ -462,15 +569,25 @@ const styles = StyleSheet.create({
     soundSelector: {
         height: 110,
     },
+    // soundCard: {
+    //     width: 100,
+    //     height: 100,
+    //     marginRight: 12,
+    //     borderRadius: 12,
+    //     overflow: 'hidden',
+    //     position: 'relative',
+    //     backgroundColor: '#222',
+    // },
     soundCard: {
-        width: 100,
-        height: 100,
-        marginRight: 12,
-        borderRadius: 12,
-        overflow: 'hidden',
-        position: 'relative',
-        backgroundColor: '#222',
-    },
+    width: 100,
+    height: 100,
+    marginRight: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#222',
+    elevation: 1
+},
     soundCardActive: {
         borderWidth: 2,
         borderColor: colors.primary,

@@ -70,12 +70,28 @@ export default function OnboardingCommunitiesScreen() {
                 .eq('is_private', false);
 
             if (channels && channels.length > 0) {
-                const channelMemRows = channels.map(c => ({
-                    user_id: user.id,
-                    channel_id: c.id,
-                }));
-                const { error: channelError } = await supabase.from('channel_followers').upsert(channelMemRows, { onConflict: 'channel_id, user_id' });
-                if (channelError) console.error("Channel error:", channelError);
+                for (const channel of channels) {
+                    const { data: existing } = await supabase
+                        .from('channel_followers')
+                        .select('id')
+                        .eq('user_id', user.id)
+                        .eq('channel_id', channel.id)
+                        .maybeSingle();
+
+                    if (existing) {
+                        await supabase
+                            .from('channel_followers')
+                            .update({ updated_at: new Date().toISOString() })
+                            .eq('id', existing.id);
+                    } else {
+                        await supabase
+                            .from('channel_followers')
+                            .insert({
+                                user_id: user.id,
+                                channel_id: channel.id,
+                            });
+                    }
+                }
             }
 
             // Fetch and join community default chats

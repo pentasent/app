@@ -1,19 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import { User } from '../types/database';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
+export { supabase };
 
 interface AuthContextType {
   user: User | null;
@@ -34,37 +24,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // 1. Initial Load
-    const initializeAuth = async () => {
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser();
+    // const initializeAuth = async () => {
+    //   try {
+    //     const { data: { user }, error } = await supabase.auth.getUser();
 
-        if (error || !user) {
-          await supabase.auth.signOut();
-          setLoading(false);
-          return;
-        }
+    //     if (error || !user) {
+    //       await supabase.auth.signOut().catch(console.error);
+    //       setLoading(false);
+    //       return;
+    //     }
 
-        await fetchAndSetUserData(user.id, user.email || '');
-      } catch (e) {
-        console.error("Initial session fetch error:", e);
-        await supabase.auth.signOut();
-        setLoading(false);
-      }
-    };
+    //     await fetchAndSetUserData(user.id, user.email || '');
+    //   } catch (e) {
+    //     console.error("Initial session fetch error:", e);
+    //     await supabase.auth.signOut().catch(console.error);
+    //     setLoading(false);
+    //   }
+    // };
+const initializeAuth = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
 
+    if (!session?.user) {
+      await supabase.auth.signOut().catch(console.error);
+      setLoading(false);
+      return;
+    }
+
+    // IMPORTANT
+    supabase.realtime.setAuth(session.access_token);
+
+    await fetchAndSetUserData(session.user.id, session.user.email || '');
+  } catch (e) {
+    console.error("Initial session fetch error:", e);
+    await supabase.auth.signOut().catch(console.error);
+    setLoading(false);
+  }
+};
     initializeAuth();
 
     // 2. Listen for Auth State Changes (Login, Logout, Token Refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        await fetchAndSetUserData(session.user.id, session.user.email || '');
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setIsAdmin(false);
-        setLoading(false);
-      }
-    });
+    // const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    //   if (event === 'SIGNED_IN' && session?.user) {
+    //     await fetchAndSetUserData(session.user.id, session.user.email || '');
+    //   } else if (event === 'SIGNED_OUT') {
+    //     setUser(null);
+    //     setIsAdmin(false);
+    //     setLoading(false);
+    //   }
+    // });
+const { data: { subscription } } = supabase.auth.onAuthStateChange(
+  async (event, session) => {
 
+    if (session?.access_token) {
+      supabase.realtime.setAuth(session.access_token);
+    }
+
+    if (event === 'SIGNED_IN' && session?.user) {
+      await fetchAndSetUserData(session.user.id, session.user.email || '');
+    }
+
+    if (event === 'SIGNED_OUT') {
+      setUser(null);
+      setIsAdmin(false);
+      setLoading(false);
+    }
+  }
+);
     return () => {
       subscription.unsubscribe();
     };

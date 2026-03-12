@@ -309,3 +309,13 @@ export interface UserNotificationSetting {
     is_editable: boolean;
     created_at: string;
 }
+
+export interface Meditation {
+    id: string;
+    title: string;
+    description?: string | null;
+    audio_url: string;
+    banner_url?: string | null;
+    play_count: number;
+    created_at: string;
+}

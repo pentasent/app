@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.borderLight,
         borderBottomLeftRadius: 4,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.surface + "30",
     },
     myBubble: {
         backgroundColor: colors.borderLight, // Simulating standard sent message block

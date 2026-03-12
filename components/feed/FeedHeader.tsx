@@ -54,7 +54,7 @@ export const FeedHeader: React.FC<FeedHeaderProps> = ({
                 {/* Left: User Profile */}
                 <TouchableOpacity style={styles.profileSection} onPress={onProfilePress}>
                     <Image
-                        source={{ uri: user?.avatar_url || 'https://via.placeholder.com/50' }}
+                        source={{ uri: user?.avatar_url || 'https://api.pentasent.com/storage/v1/object/public/avatars/placeholders/icon.png' }}
                         style={styles.avatar}
                     />
                     <View style={styles.profileInfo}>
@@ -123,17 +123,47 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: colors.borderLight,
     },
+    // contentRow: {
+    //     flexDirection: 'row',
+    //     justifyContent: 'space-between',
+    //     alignItems: 'center',
+    // },
+    // profileSection: {
+    //     flexDirection: 'row',
+    //     alignItems: 'center',
+    //     flex: 1,
+    //     marginRight: 12,
+    // },
+    //     filterButton: {
+    //     flexDirection: 'row',
+    //     alignItems: 'center',
+    //     backgroundColor: colors.borderLight,
+    //     paddingHorizontal: 12,
+    //     paddingVertical: 8,
+    //     borderRadius: 20,
+    //     maxWidth: '55%',
+    // },
     contentRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    profileSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        marginRight: 12,
-    },
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+},
+
+profileSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: '50%',
+},
+
+filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.borderLight,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 20,
+    maxWidth: '50%',
+},
     avatar: {
         width: 40,
         height: 40,
@@ -141,33 +171,38 @@ const styles = StyleSheet.create({
         marginRight: 10,
         backgroundColor: '#eee',
     },
-    profileInfo: {
-        justifyContent: 'center',
-    },
-    userName: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: colors.text,
-        marginBottom: 2,
-    },
+profileInfo: {
+    justifyContent: 'center',
+    flexShrink: 1,
+},
+    // userName: {
+    //     fontSize: 16,
+    //     fontWeight: '700',
+    //     color: colors.text,
+    //     marginBottom: 2,
+    // },
     locationRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
     },
-    userLocation: {
-        fontSize: 12,
-        color: colors.textMuted,
-    },
-    filterButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.borderLight,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        maxWidth: '55%',
-    },
+    // userLocation: {
+    //     fontSize: 12,
+    //     color: colors.textMuted,
+    // },
+    userName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 2,
+    flexShrink: 1,
+},
+
+userLocation: {
+    fontSize: 12,
+    color: colors.textMuted,
+    flexShrink: 1,
+},
     selectedCommunityLogo: {
         width: 18,
         height: 18,

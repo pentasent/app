@@ -201,6 +201,7 @@ export default function ChatListScreen() {
             });
         };
 
+        let lastStatus: string | null = null;
         const channel = supabase
             .channel('public:community_chat_messages:list')
             .on(
@@ -213,7 +214,10 @@ export default function ChatListScreen() {
                 handleNewMessage
             )
             .subscribe((status, err) => {
-                console.log('[Chat List Realtime] Status:', status);
+                if (status !== lastStatus) {
+                    console.log('[Chat List Realtime] Status:', status);
+                    lastStatus = status;
+                }
                 if (err) console.error('[Chat List Realtime] Error:', err);
             });
 

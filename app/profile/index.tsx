@@ -163,7 +163,7 @@ export default function ProfileScreen() {
           <View style={styles.headerSection}>
             <View style={styles.avatarContainer}>
               <Image
-                source={{ uri: localUser?.avatar_url || 'https://via.placeholder.com/150' }}
+                source={{ uri: localUser?.avatar_url || 'https://api.pentasent.com/storage/v1/object/public/avatars/placeholders/icon.png' }}
                 style={styles.avatar}
               />
             </View>
@@ -177,12 +177,12 @@ export default function ProfileScreen() {
                     <Text style={styles.joinedText}>{localUser.country} </Text>
                   </View>
                 )}
-                <View style={[styles.joinedRow]}>
+                {/* <View style={[styles.joinedRow]}>
                   <Calendar size={14} color={colors.textLight} />
                   <Text style={styles.joinedText}>
                     Joined {new Date(localUser?.created_at || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
                   </Text>
-                </View>
+                </View> */}
 
               </View>
             </View>
@@ -210,57 +210,74 @@ export default function ProfileScreen() {
 
             <View style={styles.rowDivider} />
 
-<View style={styles.infoRow}>
-  <Text style={styles.infoLabelSimple}>Total Posts</Text>
-  {postCount === null ? (
-    <View
-      style={{
-        width: 16,
-        height: 16,
-        backgroundColor: colors.border,
-        borderRadius: borderRadius.full,
-      }}
-    />
-  ) : (
-    <Text style={styles.infoValueSimple}>{formatNumber(postCount)}</Text>
-  )}
-</View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabelSimple}>Member Since</Text>
+              {!localUser?.created_at ? (
+                <View
+                  style={{
+                    width: 16,
+                    height: 16,
+                    backgroundColor: colors.border,
+                    borderRadius: borderRadius.full,
+                  }}
+                />
+              ) : (
+                <Text style={styles.infoValueSimple}>{new Date(localUser?.created_at || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</Text>
+              )}
+            </View>
 
-<View style={styles.rowDivider} />
+            <View style={styles.rowDivider} />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabelSimple}>Total Posts</Text>
+              {postCount === null ? (
+                <View
+                  style={{
+                    width: 16,
+                    height: 16,
+                    backgroundColor: colors.border,
+                    borderRadius: borderRadius.full,
+                  }}
+                />
+              ) : (
+                <Text style={styles.infoValueSimple}>{formatNumber(postCount)}</Text>
+              )}
+            </View>
 
-<View style={styles.infoRow}>
-  <Text style={styles.infoLabelSimple}>Communities Joined</Text>
-  {communityCount === null ? (
-    <View
-      style={{
-        width: 16,
-        height: 16,
-        backgroundColor: colors.border,
-        borderRadius: borderRadius.full,
-      }}
-    />
-  ) : (
-    <Text style={styles.infoValueSimple}>{formatNumber(communityCount)}</Text>
-  )}
-</View>
+            <View style={styles.rowDivider} />
 
-<View style={styles.rowDivider} />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabelSimple}>Communities Joined</Text>
+              {communityCount === null ? (
+                <View
+                  style={{
+                    width: 16,
+                    height: 16,
+                    backgroundColor: colors.border,
+                    borderRadius: borderRadius.full,
+                  }}
+                />
+              ) : (
+                <Text style={styles.infoValueSimple}>{formatNumber(communityCount)}</Text>
+              )}
+            </View>
 
-<View style={styles.infoRow}>
-  <Text style={styles.infoLabelSimple}>Total Journal Entries</Text>
-  {journalCount === null ? (
-    <View
-      style={{
-        width: 16,
-        height: 16,
-        backgroundColor: colors.border,
-        borderRadius: borderRadius.full,
-      }}
-    />
-  ) : (
-    <Text style={styles.infoValueSimple}>{formatNumber(journalCount)}</Text>
-  )}
-</View>
+            <View style={styles.rowDivider} />
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabelSimple}>Total Journal Entries</Text>
+              {journalCount === null ? (
+                <View
+                  style={{
+                    width: 16,
+                    height: 16,
+                    backgroundColor: colors.border,
+                    borderRadius: borderRadius.full,
+                  }}
+                />
+              ) : (
+                <Text style={styles.infoValueSimple}>{formatNumber(journalCount)}</Text>
+              )}
+            </View>
           </View>
 
           {/* Contact Us Page Trigger */}
@@ -295,7 +312,7 @@ export default function ProfileScreen() {
           {/* Developer Info Footer */}
           <View style={styles.footerInfo}>
             <Text style={styles.versionText}>App Version 1.0.0</Text>
-            <Text style={styles.developerText}>Developed by Pentasent Inc. in India</Text>
+            <Text style={styles.developerText}>Developed by Pentasent Inc.</Text>
             <Text style={styles.tagline}>Take Back Control of Your Mind and Senses</Text>
           </View>
 
@@ -414,9 +431,10 @@ const styles = StyleSheet.create({
   },
   headline: {
     fontSize: 15,
-    color: colors.textMuted,
+    color: colors.textLight,
     marginBottom: spacing.md,
     marginTop: -spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   divider: {
     height: 1,

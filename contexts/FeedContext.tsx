@@ -138,13 +138,44 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
             }
 
-            const { data, error } = await query;
+            let { data, error } = await query;
 
             if (error) {
-                throw error;
+                // Check for PGRST200: Could not find a relationship between 'posts' and 'post_images'
+                if (error.code === 'PGRST200') {
+                    console.warn('Relationship between posts and post_images not found, falling back to query without images.');
+                    let fallbackQuery = supabase
+                        .from('posts')
+                        .select(`
+                            *,
+                            user:users(id, name, avatar_url),
+                            community:communities(id, name, logo_url)
+                        `)
+                        .order('created_at', { ascending: false })
+                        .range(pageNumber * POSTS_PER_PAGE, (pageNumber + 1) * POSTS_PER_PAGE - 1);
+
+                    if (selectedCommunityId) {
+                        fallbackQuery = fallbackQuery.eq('community_id', selectedCommunityId);
+                    } else if (user) {
+                        const { data: commFollows } = await supabase
+                            .from('community_followers')
+                            .select('community_id')
+                            .eq('user_id', user.id);
+                        const followedCommunityIds = commFollows?.map(f => f.community_id) || [];
+                        if (followedCommunityIds.length > 0) {
+                            fallbackQuery = fallbackQuery.in('community_id', followedCommunityIds);
+                        }
+                    }
+
+                    const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+                    if (fallbackError) throw fallbackError;
+                    data = fallbackData;
+                } else {
+                    throw error;
+                }
             };
 
-            let postsWithLikes = data;
+            let postsWithLikes = data || [];
 
             if (user && data && data.length > 0) {
                 const postIds = data.map(p => p.id);
@@ -168,7 +199,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setPosts(prev => [...prev, ...postsWithLikes as any]);
             }
 
-            setHasMorePosts(data.length === POSTS_PER_PAGE);
+            setHasMorePosts(data?.length === POSTS_PER_PAGE);
             setPage(pageNumber);
 
         } catch (error) {

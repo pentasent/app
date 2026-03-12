@@ -89,6 +89,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     console.log(`Setting up notification subscription for user: ${user.id}`);
 
+    let lastStatus: string | null = null;
     const channel = supabase
       .channel(channelName)
       .on(
@@ -108,9 +109,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       )
       .subscribe((status) => {
-        console.log(`Notification subscription status [${user.id}]:`, status);
+        if (status !== lastStatus) {
+          console.log(`Notification subscription [${user.id.substring(0, 8)}...]:`, status);
+          lastStatus = status;
+        }
+
         if (status === 'SUBSCRIBED') {
-          // Force a fetch once subscribed to ensure we are in sync
           fetchNotifications();
         }
       });

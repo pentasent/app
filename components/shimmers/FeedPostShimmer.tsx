@@ -46,23 +46,23 @@ export const FeedPostShimmer = () => {
             {/* Actions */}
             <View style={styles.actionsContainer}>
                 <View style={styles.actionButton}>
-                    <Heart size={20} color={colors.textMuted} />
+                    {/* <Heart size={20} color={colors.textMuted} /> */}
                     <View style={styles.actionTextShimmer} />
                 </View>
 
                 <View style={styles.actionButton}>
-                    <MessageCircle size={20} color={colors.textMuted} />
+                    {/* <MessageCircle size={20} color={colors.textMuted} /> */}
                     <View style={styles.actionTextShimmer} />
                 </View>
 
                 <View style={styles.actionButton}>
-                    <BarChart2 size={20} color={colors.textMuted} />
+                    {/* <BarChart2 size={20} color={colors.textMuted} /> */}
                     <View style={styles.actionTextShimmer} />
                 </View>
 
                 <View style={styles.actionButton}>
                     <View style={styles.moreButton}>
-                        <Share2 size={20} color={colors.textMuted} />
+                        {/* <Share2 size={20} color={colors.textMuted} /> */}
                     </View>
                 </View>
             </View>

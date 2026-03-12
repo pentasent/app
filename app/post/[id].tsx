@@ -150,8 +150,30 @@ export default function PostDetailScreen() {
             setComments(formattedComments);
 
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching post details:', error);
+            if (error.code === 'PGRST200') {
+                console.warn('Relationship between posts and post_images not found, falling back to query without images.');
+                try {
+                    const { data: fallbackData, error: fallbackError } = await supabase
+                        .from('posts')
+                        .select(`
+                            *,
+                            user:users(id, name, avatar_url),
+                            community:communities(id, name, logo_url)
+                        `)
+                        .eq('id', postId)
+                        .single();
+                    if (fallbackError) throw fallbackError;
+                    if (fallbackData) {
+                        setPost(fallbackData as any);
+                        setEditTitle(fallbackData.title || '');
+                        setEditContent(parseContent(fallbackData.content));
+                    }
+                } catch (fallbackErr) {
+                    console.error('Fallback query failed:', fallbackErr);
+                }
+            }
         } finally {
             setLoading(false);
         }

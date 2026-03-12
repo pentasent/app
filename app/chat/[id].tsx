@@ -14,7 +14,8 @@ import {
   Pressable,
   LayoutAnimation,
   Linking,
-  Animated
+  Animated,
+  Keyboard
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -104,7 +105,7 @@ export default function ChatDetailScreen() {
   const blinkAnim = useRef(new Animated.Value(0)).current;
 
   const flatListRef = useRef<FlatList>(null);
-
+  const userCache = useRef<Map<string, User>>(new Map());
   const chatId = Array.isArray(id) ? id[0] : id;
 
   const handleRealtimeUpdateRef = useRef<any>(null);
@@ -112,12 +113,36 @@ export default function ChatDetailScreen() {
     handleRealtimeUpdateRef.current = handleRealtimeUpdate;
   });
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
   useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event: any) => {
+      setKeyboardHeight(event.endCoordinates.height);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!chatId) return;
+
     fetchChatDetails();
     fetchMemberCount();
     initializeChat();
 
     // Subscription for real-time updates
+    let lastStatus: string | null = null;
     const subscription = supabase
       .channel(`chat:${chatId}`)
       .on(
@@ -134,7 +159,10 @@ export default function ChatDetailScreen() {
         }
       )
       .subscribe((status, err) => {
-        console.log(`[Realtime Chat] Subscription status for chat:${chatId}:`, status);
+        if (status !== lastStatus) {
+          console.log(`[Realtime Chat] Status for chat:${chatId}:`, status);
+          lastStatus = status;
+        }
         if (err) console.error('[Realtime Chat] Subscription error:', err);
       });
 
@@ -186,17 +214,34 @@ export default function ChatDetailScreen() {
   const updateLastRead = async () => {
     if (!user) return;
     try {
-      // Upsert into community_chat_read_status
-      const { error } = await supabase
+      // Manual "upsert" to avoid constraint requirement (42P10)
+      const { data: existing } = await supabase
         .from('community_chat_read_status')
-        .upsert({
-          chat_id: chatId,
-          user_id: user.id,
-          last_read_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'chat_id,user_id' });
+        .select('id')
+        .eq('chat_id', chatId)
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-      if (error) console.error('Error updating read status:', error);
+      if (existing) {
+        const { error } = await supabase
+          .from('community_chat_read_status')
+          .update({
+            last_read_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('community_chat_read_status')
+          .insert({
+            chat_id: chatId,
+            user_id: user.id,
+            last_read_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        if (error) throw error;
+      }
     } catch (error) {
       console.error('Error updating read receipt:', error);
     }
@@ -265,6 +310,12 @@ export default function ChatDetailScreen() {
 
       setMessages(msgs);
 
+      msgs.forEach(msg => {
+        if (msg.user) {
+          userCache.current.set(msg.user.id, msg.user);
+        }
+      });
+
       // Scroll logic: if unread found, maybe scroll to it? 
       // Standard behavior: scroll to bottom, show toast "Unread messages".
       // Implementation: Scroll to bottom for now.
@@ -276,41 +327,80 @@ export default function ChatDetailScreen() {
 
   const handleRealtimeUpdate = async (payload: any) => {
     if (payload.eventType === 'INSERT') {
-      const { data, error } = await supabase
-        .from('community_chat_messages')
-        .select(`
-                    *,
-                    user:users(*),
-                    parent_message:community_chat_messages!parent_message_id(
-                        id,
-                        message_text,
-                        user:users(name)
-                    )
-                `)
-        .eq('id', payload.new.id)
-        .single();
+      const newMsg = payload.new;
 
-      if (!error && data) {
-        setMessages(prev => {
-          const isMyMessage = data.user_id === user?.id;
-          if (isMyMessage) {
-            const existingTempIndex = prev.findIndex(m =>
-              m.tempId &&
-              m.message_text === data.message_text &&
-              m.isSending
-            );
+      // Avoid fetching the newly inserted message directly to prevent replication lag issues.
+      // Instead, fetch only the necessary related data (user and parent message).
+      // const [{ data: userData }, parentRes] = await Promise.all([
+      //   supabase.from('users').select('*').eq('id', newMsg.user_id).single(),
+      //   newMsg.parent_message_id
+      //     ? supabase
+      //       .from('community_chat_messages')
+      //       .select('id, message_text, user:users(name)')
+      //       .eq('id', newMsg.parent_message_id)
+      //       .single()
+      //     : Promise.resolve({ data: null })
+      // ]);
+      let userData = userCache.current.get(newMsg.user_id);
 
-            if (existingTempIndex !== -1) {
-              const newMessages = [...prev];
-              newMessages[existingTempIndex] = data;
-              return newMessages;
-            }
-          }
-          return [...prev, data];
-        });
+      if (!userData) {
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', newMsg.user_id)
+          .single();
 
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+        if (data) {
+          userCache.current.set(newMsg.user_id, data);
+          userData = data;
+        }
       }
+
+      const parentRes = newMsg.parent_message_id
+        ? await supabase
+          .from('community_chat_messages')
+          .select('id, message_text, user:users(name)')
+          .eq('id', newMsg.parent_message_id)
+          .single()
+        : { data: null };
+
+      const data = {
+        ...newMsg,
+        user: userData || { name: 'Unknown User' },
+        parent_message: parentRes.data
+      };
+
+      setMessages(prev => {
+        const isMyMessage = data.user_id === user?.id;
+        if (isMyMessage) {
+          const existingTempIndex = prev.findIndex(m =>
+            m.tempId &&
+            m.message_text === data.message_text &&
+            m.isSending
+          );
+
+          if (existingTempIndex !== -1) {
+            const existingTemp = prev[existingTempIndex];
+            const newMessages = [...prev];
+
+            newMessages[existingTempIndex] = {
+              ...data,
+              tempId: existingTemp.tempId,
+            };
+
+            return newMessages;
+          }
+        }
+
+        // Prevent duplicate inserts if the message somehow re-arrives
+        if (prev.some(m => m.id === data.id)) {
+          return prev;
+        }
+        return [...prev, data];
+      });
+
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+
     } else if (payload.eventType === 'UPDATE') {
       setMessages(prev => {
         if (payload.new.is_deleted) {
@@ -634,12 +724,28 @@ export default function ChatDetailScreen() {
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={item => item.id || item.tempId || Math.random().toString()}
           renderItem={renderMessage}
-          contentContainerStyle={styles.listContent}
+          keyExtractor={(item, index) => item.id ?? item.tempId ?? `msg-${index}`}
+
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 20 }
+          ]}
+          style={{ flex: 1 }}
+
+          initialNumToRender={20}
+          maxToRenderPerBatch={20}
+          windowSize={10}
+          removeClippedSubviews={true}
+          updateCellsBatchingPeriod={50}
+
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0
+          }}
+
+          keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          style={{ flex: 1 }}
         />
       )}
 

@@ -26,7 +26,7 @@ export const BeatTagList: React.FC<BeatTagListProps> = ({ tags, selectedTag, onS
                 activeOpacity={0.8}
             >
                 <ImageBackground
-                    source={{ uri: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=2940&auto=format&fit=crop' }}
+                    source={{ uri: 'https://api.pentasent.com/storage/v1/object/public/avatars/beats/allbeats.png' }}
                     style={styles.cardBackground}
                     imageStyle={styles.cardImage}
                 >
