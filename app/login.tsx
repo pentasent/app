@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,10 @@ import {
   ScrollView,
   Alert,
   Animated,
-  TouchableOpacity
+  TouchableOpacity,
+  Modal,
+  ActivityIndicator,
+  KeyboardAvoidingView
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,7 +20,7 @@ import { Toast } from '../components/Toast';
 import { colors, spacing, borderRadius, typography } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react-native';
+import { Eye, EyeOff, Mail, X, CheckCircle2 } from 'lucide-react-native';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
@@ -28,8 +31,37 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  
+  // Forgot Password States
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  const { login, resetPassword } = useAuth();
   const router = useRouter();
+
+  const isValidEmail = (email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  };
+
+  // Cooldown timer logic
+  useEffect(() => {
+    let interval: any;
+    if (cooldown > 0) {
+      interval = setInterval(() => {
+        setCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [cooldown]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
 
   const handleLogin = async () => {
     setErrorMsg(null);
@@ -44,12 +76,31 @@ export default function LoginScreen() {
     } catch (error: any) {
       const msg = error.message || 'An error occurred during login';
       setErrorMsg(msg);
-      // Automatic OTP redirect logic for unverified emails:
       if (msg.includes('Email not confirmed')) {
         router.push(`/verify-otp?email=${encodeURIComponent(email)}` as any);
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!isValidEmail(forgotEmail)) return;
+    
+    if (cooldown > 0) {
+      setErrorMsg(`Please wait ${formatTime(cooldown)} before resending.`);
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      await resetPassword(forgotEmail.toLowerCase().trim());
+      setEmailSent(true);
+      setCooldown(120); // 2 minutes cooldown
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Failed to send reset link');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -67,14 +118,10 @@ export default function LoginScreen() {
           >
             <View style={styles.header}>
               <View style={styles.logoContainer}>
-                {/* <View style={styles.logo}>
-                <View style={styles.logoPattern} />
-              </View> */}
                 <AnimatedImage
                   source={require('@/assets/images/logo/logo_light.svg')}
                   style={styles.logo}
                   contentFit="contain"
-                // tintColor="#FFFFFF"
                 />
               </View>
               <Text style={styles.title}>Pentasent</Text>
@@ -110,6 +157,13 @@ export default function LoginScreen() {
                 }
               />
 
+              <TouchableOpacity 
+                onPress={() => setShowForgotModal(true)}
+                style={styles.forgotPasswordLink}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
+
               <Button
                 title="Login"
                 onPress={handleLogin}
@@ -136,6 +190,93 @@ export default function LoginScreen() {
           </ScrollView>
         </KeyboardShiftView>
       </LinearGradient>
+
+      {/* Forgot Password Modal */}
+      <Modal
+        visible={showForgotModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowForgotModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContainer}
+          >
+            <View style={styles.modalContent}>
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => {
+                  setShowForgotModal(false);
+                  setEmailSent(false);
+                }}
+              >
+                <X size={24} color={colors.textMuted} />
+              </TouchableOpacity>
+
+              {emailSent ? (
+                <View style={styles.successContainer}>
+                  <CheckCircle2 size={60} color={colors.success} strokeWidth={1.5} />
+                  <Text style={styles.modalTitle}>Check your email</Text>
+                  <Text style={styles.modalDescription}>
+                    If an account exists with {forgotEmail}, you will receive a password reset link shortly.
+                  </Text>
+                  
+                  <View style={styles.tipCard}>
+                    <Text style={styles.tipText}>
+                      💡 Didn't receive an email? Check your spam folder, or make sure the email address is correct.
+                    </Text>
+                  </View>
+
+                  <Button
+                    title={cooldown > 0 ? `Resend in ${formatTime(cooldown)}` : "Resend Link"}
+                    onPress={handleForgotPassword}
+                    loading={forgotLoading}
+                    disabled={cooldown > 0}
+                    variant="outline"
+                    style={styles.modalButton}
+                  />
+                  
+                  <Button
+                    title="Back to Login"
+                    onPress={() => {
+                      setShowForgotModal(false);
+                      setEmailSent(false);
+                    }}
+                    style={styles.modalButton}
+                  />
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.modalTitle}>Reset Password</Text>
+                  <Text style={styles.modalDescription}>
+                    Enter your email address and we'll send you a link to reset your password.
+                  </Text>
+
+                  <Input
+                    label="Email Address"
+                    placeholder="example@email.com"
+                    value={forgotEmail}
+                    onChangeText={setForgotEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    leftAccessory={<Mail size={20} color={colors.textMuted} style={{marginRight: 10}} />}
+                  />
+
+                  <Button
+                    title={cooldown > 0 ? `Resend in ${formatTime(cooldown)}` : "Send Reset Link"}
+                    onPress={handleForgotPassword}
+                    loading={forgotLoading}
+                    disabled={!isValidEmail(forgotEmail) || cooldown > 0}
+                    style={styles.modalButton}
+                  />
+                </>
+              )}
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -172,13 +313,6 @@ const styles = StyleSheet.create({
     width: 55,
     height: 55,
   },
-  logoPattern: {
-    width: 60,
-    height: 60,
-    backgroundColor: colors.primaryLight,
-    borderRadius: borderRadius.md,
-    transform: [{ rotate: '45deg' }],
-  },
   title: {
     ...typography.h1,
     color: colors.primary,
@@ -199,6 +333,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 12,
     elevation: 4,
+  },
+  forgotPasswordLink: {
+    alignSelf: 'flex-end',
+    marginBottom: spacing.md,
+    marginTop: -spacing.xs,
+  },
+  forgotPasswordText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    fontWeight: '500',
   },
   loginButton: {
     marginTop: spacing.sm,
@@ -224,5 +368,65 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xl,
     fontStyle: 'italic',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalContainer: {
+    width: '100%',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xl,
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    padding: spacing.xs,
+    zIndex: 10,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalDescription: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    lineHeight: 20,
+  },
+  modalButton: {
+    marginTop: spacing.md,
+    width: '100%',
+  },
+  successContainer: {
+    alignItems: 'center',
+  },
+  tipCard: {
+    backgroundColor: colors.primaryLight + '30',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginVertical: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+  },
+  tipText: {
+    ...typography.caption,
+    color: colors.text,
+    lineHeight: 18,
   }
 });

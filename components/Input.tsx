@@ -5,15 +5,17 @@ import { colors, spacing, borderRadius, typography } from '../constants/theme';
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
+  leftAccessory?: React.ReactNode;
   rightAccessory?: React.ReactNode;
   containerStyle?: object;
 }
 
-export const Input: React.FC<InputProps> = ({ label, error, rightAccessory, style, containerStyle, ...props }) => {
+export const Input: React.FC<InputProps> = ({ label, error, leftAccessory, rightAccessory, style, containerStyle, ...props }) => {
   return (
     <View style={[styles.container, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={[styles.inputContainer, error && styles.inputError]}>
+        {leftAccessory && <View style={styles.leftAccessory}>{leftAccessory}</View>}
         <TextInput
           style={[styles.inputElement, style]}
           placeholderTextColor={colors.textMuted}
@@ -50,6 +52,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     ...typography.body,
     color: colors.text,
+  },
+  leftAccessory: {
+    marginRight: spacing.sm,
   },
   rightAccessory: {
     marginLeft: spacing.sm,

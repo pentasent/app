@@ -13,6 +13,7 @@ interface AuthContextType {
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -204,8 +205,19 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
     }
   };
 
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://pentasent.com/reset-password',
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      throw new Error(error.message || 'Reset password failed');
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isAdmin, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, isAdmin, loading, login, register, logout, refreshUser, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );
