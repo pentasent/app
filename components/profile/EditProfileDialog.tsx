@@ -11,6 +11,7 @@ import { supabase } from '../../contexts/AuthContext';
 import { User } from '../../types/database';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import { COUNTRIES } from '@/lib/country';
 
 interface EditProfileDialogProps {
     visible: boolean;
@@ -19,18 +20,18 @@ interface EditProfileDialogProps {
     onUpdate: () => void; // Trigger refresh in parent
 }
 
-const COUNTRIES = [
-    { label: 'United States', flag: '🇺🇸' },
-    { label: 'United Kingdom', flag: '🇬🇧' },
-    { label: 'India', flag: '🇮🇳' },
-    { label: 'Canada', flag: '🇨🇦' },
-    { label: 'Australia', flag: '🇦🇺' },
-    { label: 'Germany', flag: '🇩🇪' },
-    { label: 'France', flag: '🇫🇷' },
-    { label: 'Japan', flag: '🇯🇵' },
-    { label: 'Brazil', flag: '🇧🇷' },
-    { label: 'South Africa', flag: '🇿🇦' },
-];
+// const COUNTRIES = [
+//     { label: 'United States', flag: '🇺🇸' },
+//     { label: 'United Kingdom', flag: '🇬🇧' },
+//     { label: 'India', flag: '🇮🇳' },
+//     { label: 'Canada', flag: '🇨🇦' },
+//     { label: 'Australia', flag: '🇦🇺' },
+//     { label: 'Germany', flag: '🇩🇪' },
+//     { label: 'France', flag: '🇫🇷' },
+//     { label: 'Japan', flag: '🇯🇵' },
+//     { label: 'Brazil', flag: '🇧🇷' },
+//     { label: 'South Africa', flag: '🇿🇦' },
+// ];
 
 export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: EditProfileDialogProps) => {
     const [name, setName] = useState('');

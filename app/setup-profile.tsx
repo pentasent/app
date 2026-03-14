@@ -23,19 +23,20 @@ import { Camera, ChevronDown, Check, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import { COUNTRIES } from '@/lib/country';
 
-const COUNTRIES = [
-    { label: 'United States', flag: '🇺🇸' },
-    { label: 'United Kingdom', flag: '🇬🇧' },
-    { label: 'India', flag: '🇮🇳' },
-    { label: 'Canada', flag: '🇨🇦' },
-    { label: 'Australia', flag: '🇦🇺' },
-    { label: 'Germany', flag: '🇩🇪' },
-    { label: 'France', flag: '🇫🇷' },
-    { label: 'Japan', flag: '🇯🇵' },
-    { label: 'Brazil', flag: '🇧🇷' },
-    { label: 'South Africa', flag: '🇿🇦' },
-];
+// const COUNTRIES = [
+//     { label: 'United States', flag: '🇺🇸' },
+//     { label: 'United Kingdom', flag: '🇬🇧' },
+//     { label: 'India', flag: '🇮🇳' },
+//     { label: 'Canada', flag: '🇨🇦' },
+//     { label: 'Australia', flag: '🇦🇺' },
+//     { label: 'Germany', flag: '🇩🇪' },
+//     { label: 'France', flag: '🇫🇷' },
+//     { label: 'Japan', flag: '🇯🇵' },
+//     { label: 'Brazil', flag: '🇧🇷' },
+//     { label: 'South Africa', flag: '🇿🇦' },
+// ];
 
 export default function SetupProfileScreen() {
     const { user, refreshUser } = useAuth();

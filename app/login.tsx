@@ -10,7 +10,8 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
@@ -187,96 +188,109 @@ export default function LoginScreen() {
             <Text style={styles.footer}>
               Take Back Control of Your Mind and Senses
             </Text>
-          </ScrollView>
-        </KeyboardShiftView>
-      </LinearGradient>
 
-      {/* Forgot Password Modal */}
+                  {/* Forgot Password Modal */}
       <Modal
         visible={showForgotModal}
         transparent
+        statusBarTranslucent
         animationType="fade"
         onRequestClose={() => setShowForgotModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalContainer}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => Keyboard.dismiss()}
           >
-            <View style={styles.modalContent}>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => {
-                  setShowForgotModal(false);
-                  setEmailSent(false);
-                }}
+            <View style={styles.modalContainer}>
+              <ScrollView 
+                contentContainerStyle={styles.modalScrollContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
               >
-                <X size={24} color={colors.textMuted} />
-              </TouchableOpacity>
-
-              {emailSent ? (
-                <View style={styles.successContainer}>
-                  <CheckCircle2 size={60} color={colors.success} strokeWidth={1.5} />
-                  <Text style={styles.modalTitle}>Check your email</Text>
-                  <Text style={styles.modalDescription}>
-                    If an account exists with {forgotEmail}, you will receive a password reset link shortly.
-                  </Text>
-                  
-                  <View style={styles.tipCard}>
-                    <Text style={styles.tipText}>
-                      💡 Didn't receive an email? Check your spam folder, or make sure the email address is correct.
-                    </Text>
-                  </View>
-
-                  <Button
-                    title={cooldown > 0 ? `Resend in ${formatTime(cooldown)}` : "Resend Link"}
-                    onPress={handleForgotPassword}
-                    loading={forgotLoading}
-                    disabled={cooldown > 0}
-                    variant="outline"
-                    style={styles.modalButton}
-                  />
-                  
-                  <Button
-                    title="Back to Login"
+                <View style={styles.modalContent}>
+                  <TouchableOpacity 
+                    style={styles.closeButton}
                     onPress={() => {
                       setShowForgotModal(false);
                       setEmailSent(false);
                     }}
-                    style={styles.modalButton}
-                  />
+                  >
+                    <X size={24} color={colors.textMuted} />
+                  </TouchableOpacity>
+
+                  {emailSent ? (
+                    <View style={styles.successContainer}>
+                      <CheckCircle2 size={60} color={colors.success} strokeWidth={1.5} />
+                      <Text style={styles.modalTitle}>Check your email</Text>
+                      <Text style={styles.modalDescription}>
+                        If an account exists with {forgotEmail}, you will receive a password reset link shortly.
+                      </Text>
+                      
+                      <View style={styles.tipCard}>
+                        <Text style={styles.tipText}>
+                          💡 Didn't receive an email? Check your spam folder, or make sure the email address is correct.
+                        </Text>
+                      </View>
+
+                      <Button
+                        title={cooldown > 0 ? `Resend in ${formatTime(cooldown)}` : "Resend Link"}
+                        onPress={handleForgotPassword}
+                        loading={forgotLoading}
+                        disabled={cooldown > 0}
+                        variant="outline"
+                        style={styles.modalButton}
+                      />
+                      
+                      <Button
+                        title="Back to Login"
+                        onPress={() => {
+                          setShowForgotModal(false);
+                          setEmailSent(false);
+                        }}
+                        style={styles.modalButton}
+                      />
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.modalTitle}>Reset Password</Text>
+                      <Text style={styles.modalDescription}>
+                        Enter your email address and we'll send you a link to reset your password.
+                      </Text>
+
+                      <Input
+                        label="Email Address"
+                        placeholder="example@email.com"
+                        value={forgotEmail}
+                        onChangeText={setForgotEmail}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        leftAccessory={<Mail size={20} color={colors.textMuted} style={{marginRight: 10}} />}
+                      />
+
+                      <Button
+                        title={cooldown > 0 ? `Resend in ${formatTime(cooldown)}` : "Send Reset Link"}
+                        onPress={handleForgotPassword}
+                        loading={forgotLoading}
+                        disabled={!isValidEmail(forgotEmail) || cooldown > 0}
+                        style={styles.modalButton}
+                      />
+                    </>
+                  )}
                 </View>
-              ) : (
-                <>
-                  <Text style={styles.modalTitle}>Reset Password</Text>
-                  <Text style={styles.modalDescription}>
-                    Enter your email address and we'll send you a link to reset your password.
-                  </Text>
-
-                  <Input
-                    label="Email Address"
-                    placeholder="example@email.com"
-                    value={forgotEmail}
-                    onChangeText={setForgotEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    leftAccessory={<Mail size={20} color={colors.textMuted} style={{marginRight: 10}} />}
-                  />
-
-                  <Button
-                    title={cooldown > 0 ? `Resend in ${formatTime(cooldown)}` : "Send Reset Link"}
-                    onPress={handleForgotPassword}
-                    loading={forgotLoading}
-                    disabled={!isValidEmail(forgotEmail) || cooldown > 0}
-                    style={styles.modalButton}
-                  />
-                </>
-              )}
+              </ScrollView>
             </View>
-          </KeyboardAvoidingView>
-        </View>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
+          </ScrollView>
+        </KeyboardShiftView>
+      </LinearGradient>
     </>
   );
 }
@@ -374,6 +388,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     padding: spacing.lg,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
   },
   modalContainer: {
     width: '100%',

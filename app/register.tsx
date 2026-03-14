@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,8 @@ import {
   Animated,
   TouchableOpacity
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
 import { Button } from '../components/Button';
@@ -35,6 +36,24 @@ export default function RegisterScreen() {
   const { register } = useAuth();
   const { addNotification } = useApp();
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const [referralCode, setReferralCode] = useState('P-APP');
+
+  useEffect(() => {
+    const initializeReferral = async () => {
+      const urlRef = params.ref as string;
+      if (urlRef) {
+        await AsyncStorage.setItem('referral_code', urlRef).catch(console.error);
+        setReferralCode(urlRef);
+      } else {
+        const storedRef = await AsyncStorage.getItem('referral_code').catch(console.error);
+        if (storedRef) {
+          setReferralCode(storedRef);
+        }
+      }
+    };
+    initializeReferral();
+  }, [params.ref]);
 
   const handleRegister = async () => {
     setErrorMsg(null);
@@ -55,7 +74,12 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      await register(email.toLowerCase().trim(), password);
+      const metadata = {
+        referral_code: referralCode,
+        date: new Date().toISOString(),
+        Campain: "Promotion From App"
+      };
+      await register(email.toLowerCase().trim(), password, metadata);
 
       // Successfully registered, track event
       trackEvent('user_signup');

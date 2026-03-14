@@ -1,5 +1,6 @@
 import 'react-native-url-polyfill/auto'
 import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
@@ -39,6 +40,12 @@ function RootLayoutNav() {
           // Save for later once they log in and onboard
           setPendingDeepLinkRoute(targetRoute);
         }
+      }
+
+      // Capture referral code if present in query params
+      const ref = parsed.queryParams?.ref as string;
+      if (ref) {
+        AsyncStorage.setItem('referral_code', ref).catch(console.error);
       }
     }
   }, [url, user]);

@@ -26,7 +26,6 @@ import {
   Baby,
   Bell,
 } from 'lucide-react-native';
-import { FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
