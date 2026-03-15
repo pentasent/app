@@ -11,11 +11,13 @@ import { CommentSection } from '../../components/feed/CommentSection';
 import { StatusBar } from 'expo-status-bar';
 import { parseContent } from '../../utils/content';
 import { EditPostDialog } from '../../components/feed/EditPostDialog';
+import { FeedPostShimmer } from '../../components/shimmers/FeedPostShimmer';
+import { CommentShimmer } from '../../components/shimmers/CommentShimmer';
+import { DotsLoader } from '../../components/DotsLoader';
 import { formatNumber } from '../../utils/format';
 import { useFeed } from '../../contexts/FeedContext';
 import { Video, ResizeMode } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
-import { decode } from 'base64-arraybuffer';
+import { uploadImage } from '../../utils/image-upload';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
 
 const { width, height } = Dimensions.get('window');
@@ -25,10 +27,11 @@ export default function PostDetailScreen() {
     const postId = Array.isArray(id) ? id[0] : id;
     const router = useRouter();
     const { user: currentUser } = useAuth(); // Use global auth state
-    const { posts, updatePost, removePost } = useFeed(); // Access global feed context
+    const { posts, updatePost, removePost, deletePost } = useFeed(); // Access global feed context
 
     const [toastMsg, setToastMsg] = useState<string | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<{ type: 'post' | 'comment', id?: string } | null>(null);
 
     const [post, setPost] = useState<Post | null>(() => {
         const cached = posts.find(p => p.id === postId);
@@ -53,11 +56,21 @@ export default function PostDetailScreen() {
     const [editContent, setEditContent] = useState('');
     const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
+    // Sync with global feed state (for is_uploading status)
     useEffect(() => {
-        if (postId) {
+        const globalPost = posts.find(p => p.id === postId);
+        if (globalPost && globalPost.is_uploading !== post?.is_uploading) {
+            setPost(prev => prev ? { ...prev, ...globalPost } : globalPost);
+        }
+    }, [posts, postId, post?.is_uploading]);
+
+    useEffect(() => {
+        // Only fetch if we don't have a post OR if we have a post but it's not currently uploading
+        // (to prevent overwriting optimistic state with stale server data)
+        if (postId && (!post || !post.is_uploading)) {
             fetchPostDetails();
         }
-    }, [postId, currentUser]); // Add currentUser to dep array to re-check likes if user loads late
+    }, [postId, currentUser, post?.is_uploading]); // Add currentUser to dep array to re-check likes if user loads late
 
     const fetchPostDetails = async () => {
         try {
@@ -68,8 +81,7 @@ export default function PostDetailScreen() {
           *,
           user:users(id, name, avatar_url),
           community:communities(id, name, logo_url),
-          images:post_images(*),
-          channels:channels(id, name)
+          images:post_images(*)
         `)
                 .eq('id', postId)
                 .single();
@@ -385,20 +397,50 @@ export default function PostDetailScreen() {
     };
 
     const handleDeletePost = async () => {
+        setDeleteTarget({ type: 'post' });
         setShowDeleteModal(true);
     };
 
     const confirmDeletePost = async () => {
-        if (isDeleting) return;
+        if (isDeleting || !deleteTarget) return;
         setIsDeleting(true);
         try {
-            // setLoading(true); // Don't use setLoading as it hides the whole screen usually
-            await supabase.from('posts').delete().eq('id', postId);
-            removePost(postId);
-            setShowDeleteModal(false);
-            router.replace('/(tabs)');
+            if (deleteTarget.type === 'post') {
+                // Use background delete from context
+                await deletePost(postId);
+                
+                setShowDeleteModal(false);
+                setToastMsg("Post deleted successfully");
+                
+                // Delay navigation slightly for smooth transition
+                setTimeout(() => {
+                    router.replace('/(tabs)');
+                }, 1500);
+            } else if (deleteTarget.type === 'comment' && deleteTarget.id) {
+                const commentId = deleteTarget.id;
+                await supabase.from('comments').delete().eq('id', commentId);
+
+                // Optimistic Remove
+                const removeComment = (list: Comment[]): Comment[] => {
+                    return list.filter(c => c.id !== commentId).map(c => ({
+                        ...c,
+                        replies: c.replies ? removeComment(c.replies) : []
+                    }));
+                };
+                setComments(current => removeComment(current));
+
+                // Update post comments count
+                if (post) {
+                    await supabase.from('posts').update({ comments_count: Math.max(0, post.comments_count - 1) }).eq('id', postId);
+                    setPost(prev => prev ? { ...prev, comments_count: Math.max(0, prev.comments_count - 1) } : null);
+                }
+                
+                setShowDeleteModal(false);
+                setToastMsg("Comment deleted successfully");
+                setIsDeleting(false);
+            }
         } catch (e) {
-            setToastMsg("Failed to delete post.");
+            setToastMsg(`Failed to delete ${deleteTarget.type}.`);
             setIsDeleting(false);
             setShowDeleteModal(false);
         }
@@ -406,108 +448,126 @@ export default function PostDetailScreen() {
 
     const handleEditPost = async (title: string, content: string, updatedImages: string[]) => {
         try {
-            setLoading(true);
-
-            // 1. Update Title and Content
             const contentPayload = {
                 type: 'doc',
                 content: [{ type: 'paragraph', content: [{ type: 'text', text: content.trim() }] }]
             };
 
-            const { error } = await supabase
-                .from('posts')
-                .update({ title: title, content: contentPayload })
-                .eq('id', postId);
-
-            if (error) throw error;
-
-            // 2. Handle Images
+            // 1. Optimistic Update Data
             const currentImages = post?.images || [];
-            const currentImageUrls = currentImages.map(img => img.image_url);
-
-            // Identify Removed Images
-            const removedImages = currentImages.filter(img => !updatedImages.includes(img.image_url));
-            if (removedImages.length > 0) {
-                const idsToDelete = removedImages.map(img => img.id);
-                // Delete from DB
-                await supabase.from('post_images').delete().in('id', idsToDelete);
-
-                // Ideally also delete from Storage bucket, but we might skip that for MVP to avoid complexity if bucket paths aren't easily derived or if we don't have a storage cleanup trigger.
-                // Assuming we just delete the reference in `post_images` for now.
-            }
-
-            // Identify New Images (Local URIs)
-            const newImages = updatedImages.filter(url => !url.startsWith('http'));
-
-            const newImageDTOs: any[] = [];
-
-            // Upload New Images
-            // NOTE: This assumes we have an upload helper or logic similar to CreatePost
-            // Since we don't have the upload logic exposed here, we need to implement it or reuse it.
-            // For now, I will assume a direct upload capability or base64 if that's how it's done, 
-            // BUT `CreatePostDialog` usually returns local URIs and `useFeed` handles upload?
-            // Wait, `useFeed` createPost handles upload? No, `useFeed` receives URLs? 
-            // Let's check `CreatePostDialog`... it returns images array. 
-            // `useFeed.createPost` takes DTO. logic for upload is likely needed here.
-
-            // Re-implementing basic upload logic here for PostDetail
-            if (newImages.length > 0) {
-                for (let i = 0; i < newImages.length; i++) {
-                    const localUri = newImages[i];
-                    let finalUrl = localUri;
-
-                    if (!localUri.startsWith('http') && currentUser) {
-                        const filename = `${currentUser.id}_post_edit_${Date.now()}_${i}.jpg`;
-                        const path = `posts/${filename}`;
-
-                        const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
-
-                        const { error: uploadError } = await supabase.storage
-                            .from('avatars')
-                            .upload(path, decode(base64), { contentType: 'image/jpeg' });
-
-                        if (!uploadError) {
-                            const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
-                            finalUrl = publicUrlData.publicUrl;
-                        } else {
-                            console.error('Post Edit Image Upload Error:', uploadError);
-                        }
-                    }
-
-                    // Insert into post_images
-                    const { data: imgInsert, error: insertError } = await supabase.from('post_images').insert({
-                        post_id: postId,
-                        image_url: finalUrl, // Use uploaded public URI
-                        order_index: currentImages.length + i // Append to end
-                    }).select().single();
-
-                    if (imgInsert) newImageDTOs.push(imgInsert);
-                    if (insertError) console.error("Error inserting image", insertError);
-                }
-            }
-
-            // Refetch post to get clean state or manually patch
-            // For manual patch:
-            const finalImages = [
-                ...currentImages.filter(img => !removedImages.includes(img)),
-                ...newImageDTOs
+            const existingImages = currentImages.filter(img => updatedImages.includes(img.image_url));
+            const newLocalURIs = updatedImages.filter(url => !url.startsWith('http'));
+            
+            // Create optimistic images list (existing + local URIs)
+            const optimisticImages = [
+                ...existingImages,
+                ...newLocalURIs.map((uri, i) => ({
+                    id: `temp-${Date.now()}-${i}`,
+                    image_url: uri,
+                    post_id: postId,
+                    order_index: existingImages.length + i,
+                    is_local: true // Marker for UI if needed
+                }))
             ];
 
-            setPost(prev => prev ? {
-                ...prev,
-                title: title,
+            const optimisticPost = {
+                ...post,
+                title,
                 content: contentPayload,
-                images: finalImages
-            } : null);
+                images: optimisticImages,
+                local_image_urls: newLocalURIs,
+                is_uploading: true,
+                is_edited: true
+            } as any;
 
-            setShowEditModal(false);
-            setToastMsg("Post updated successfully.");
+            // Update both local and global state instantly
+            setPost(optimisticPost);
+            updatePost(postId, optimisticPost);
+            
+            if (newLocalURIs.length > 0) {
+                setToastMsg("Updating in background...");
+            } else {
+                setToastMsg("Post updated successfully");
+            }
 
-        } catch (e) {
-            console.error(e);
-            setToastMsg("Failed to update post.");
-        } finally {
-            setLoading(false);
+            // 2. Background Synchronization
+            (async () => {
+                try {
+                    // 2.1 Update Main Post Data
+                    const { error: postError } = await supabase
+                        .from('posts')
+                        .update({ title, content: contentPayload, is_edited: true })
+                        .eq('id', postId);
+                    if (postError) throw postError;
+
+                    // 2.2 Handle Image Deletions
+                    const removedImages = currentImages.filter(img => !updatedImages.includes(img.image_url));
+                    if (removedImages.length > 0) {
+                        const idsToDelete = removedImages.map(img => img.id);
+                        await supabase.from('post_images').delete().in('id', idsToDelete);
+                        // Clean up storage (no await, it's fine)
+                        removedImages.forEach(img => {
+                            try {
+                                const path = new URL(img.image_url).pathname.split('/').slice(-2).join('/');
+                                supabase.storage.from('avatars').remove([path]).then();
+                            } catch {}
+                        });
+                    }
+
+                    // 2.3 Upload New Images in Parallel
+                    let newImageDTOs: any[] = [];
+                    if (newLocalURIs.length > 0 && currentUser) {
+                    const uploadPromises = newLocalURIs.map(async (localUri, i) => {
+                        const filename = `posts/${currentUser.id}_edit_${Date.now()}_${i}.jpg`;
+                        
+                        await uploadImage(localUri, filename);
+                        
+                        const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filename);
+                            
+                            const { data: imgInsert, error: insertError } = await supabase
+                                .from('post_images')
+                                .insert({
+                                    post_id: postId,
+                                    image_url: publicUrlData.publicUrl,
+                                    order_index: existingImages.length + i
+                                })
+                                .select()
+                                .single();
+
+                            if (insertError) throw insertError;
+                            return imgInsert;
+                        });
+
+                        newImageDTOs = await Promise.all(uploadPromises);
+                    }
+
+                    // 2.4 Final Sync
+                    const finalPostData = {
+                        ...optimisticPost,
+                        images: [...existingImages, ...newImageDTOs],
+                        is_uploading: false,
+                        local_image_urls: []
+                    };
+                    
+                    setPost(finalPostData as any);
+                    updatePost(postId, finalPostData as any);
+                    if (newLocalURIs.length > 0) {
+                        setToastMsg("Post updated successfully");
+                    }
+
+                } catch (backgroundError: any) {
+                    console.error('Background Sync Error:', backgroundError);
+                    setPost(current => current ? { ...current, is_uploading: false } : null);
+                    updatePost(postId, { is_uploading: false });
+                    setToastMsg("Background sync failed. Some changes might not be saved.");
+                }
+            })();
+
+            // Return immediately to allow dialog closure
+            return;
+        } catch (e: any) {
+            console.error('Edit Initiation Error:', e);
+            setToastMsg("Failed to start update.");
         }
     };
 
@@ -518,40 +578,8 @@ export default function PostDetailScreen() {
     };
 
     const handleDeleteComment = async (commentId: string) => {
-        Alert.alert(
-            "Delete Comment",
-            "Are you sure?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            await supabase.from('comments').delete().eq('id', commentId);
-
-                            // Optimistic Remove
-                            const removeComment = (list: Comment[]): Comment[] => {
-                                return list.filter(c => c.id !== commentId).map(c => ({
-                                    ...c,
-                                    replies: c.replies ? removeComment(c.replies) : []
-                                }));
-                            };
-                            setComments(current => removeComment(current));
-
-                            // Update post comments count
-                            if (post) {
-                                await supabase.from('posts').update({ comments_count: Math.max(0, post.comments_count - 1) }).eq('id', postId);
-                                setPost(prev => prev ? { ...prev, comments_count: Math.max(0, prev.comments_count - 1) } : null);
-                            }
-
-                        } catch (e) {
-                            Alert.alert("Error", "Failed to delete comment");
-                        }
-                    }
-                }
-            ]
-        );
+        setDeleteTarget({ type: 'comment', id: commentId });
+        setShowDeleteModal(true);
     };
 
     const isOwner = currentUser && post && post.user_id === currentUser.id;
@@ -583,9 +611,14 @@ export default function PostDetailScreen() {
                 <StatusBar style="dark" backgroundColor="transparent" translucent />
                 <Stack.Screen options={{ headerShown: false }} />
                 {renderNavBar()}
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={colors.primary} />
-                </View>
+                <ScrollView style={{ flex: 1 }}>
+                    <FeedPostShimmer />
+                    <View style={{ padding: 16 }}>
+                        <CommentShimmer />
+                        <CommentShimmer />
+                        <CommentShimmer />
+                    </View>
+                </ScrollView>
             </SafeAreaView>
         );
     }
@@ -621,7 +654,12 @@ export default function PostDetailScreen() {
                     <View style={styles.optionsMenu}>
                         {optionsTarget?.type === 'post' && (
                             <>
-                                <TouchableOpacity style={styles.optionItem} onPress={() => { setOptionsTarget(null); setShowEditModal(true); }}>
+                                <TouchableOpacity style={styles.optionItem} onPress={() => { 
+                                    setEditTitle(post?.title || '');
+                                    setEditContent(parseContent(post?.content));
+                                    setOptionsTarget(null); 
+                                    setShowEditModal(true); 
+                                }}>
                                     <Edit2 size={20} color={colors.text} />
                                     <Text style={styles.optionText}>Edit Post</Text>
                                 </TouchableOpacity>
@@ -665,7 +703,7 @@ export default function PostDetailScreen() {
                 initialContent={editContent}
                 initialImages={post?.images?.map(i => i.image_url) || []}
                 community={post?.community}
-                channel={post?.channels?.[0]}
+                channel={post?.channels ? post.channels[0] : undefined}
             />
 
             {/* Full Screen Image Modal */}
@@ -692,6 +730,14 @@ export default function PostDetailScreen() {
                             <Image source={{ uri: post.user?.avatar_url || 'https://via.placeholder.com/40' }} style={styles.avatar} />
                             <View>
                                 <Text style={styles.username}>{post.user?.name || 'Anonymous'}</Text>
+                                {(post as any).is_uploading && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '600' }}>
+                                            {post.is_edited ? 'Updating...' : 'Uploading...'}
+                                        </Text>
+                                        <DotsLoader color={colors.primary} size={4} />
+                                    </View>
+                                )}
                                 <View style={styles.metaRow}>
                                     {post.community && (
                                         <Text style={styles.communityName}>{post.community.name} • </Text>
@@ -713,8 +759,8 @@ export default function PostDetailScreen() {
                                 showsHorizontalScrollIndicator={false}
                                 style={styles.imageScroll}
                             >
-                                {post.images.map((img: any) => (
-                                    <TouchableOpacity key={img.id} onPress={() => setFullScreenImage(img.image_url)}>
+                                {post.images.map((img: any, idx: number) => (
+                                    <TouchableOpacity key={img.id || `img-${idx}`} onPress={() => setFullScreenImage(img.image_url)}>
                                         <Image
                                             source={{ uri: img.image_url }}
                                             style={
@@ -808,8 +854,12 @@ export default function PostDetailScreen() {
             >
                 <View style={styles.modalOverlayDelete}>
                     <View style={styles.modalContentDelete}>
-                        <Text style={styles.modalTitleDelete}>Delete Post</Text>
-                        <Text style={styles.modalMessageDelete}>Are you sure you want to delete this post?</Text>
+                        <Text style={styles.modalTitleDelete}>
+                            {deleteTarget?.type === 'post' ? 'Delete Post' : 'Delete Comment'}
+                        </Text>
+                        <Text style={styles.modalMessageDelete}>
+                            Are you sure you want to delete this {deleteTarget?.type}?
+                        </Text>
                         <View style={styles.modalActionsDelete}>
                             <TouchableOpacity
                                 style={styles.modalCancelBtnDelete}
@@ -938,13 +988,11 @@ const styles = StyleSheet.create({
         height: 200,
         borderRadius: 12,
         marginRight: 12,
-        backgroundColor: colors.border,
     },
     singleImage: {
         width: '100%',
         height: 200,
         borderRadius: 12,
-        backgroundColor: colors.border,
     },
     engagement: {
         flexDirection: 'row',

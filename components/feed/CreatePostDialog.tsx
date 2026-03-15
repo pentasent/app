@@ -31,7 +31,6 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
 
     // Validation State
     const [toastMsg, setToastMsg] = useState<string | null>(null);
-    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     // Character Limit
     const MAX_TITLE_LENGTH = 50;
@@ -63,11 +62,6 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
         resetForm();
     };
 
-    const handleCloseSuccess = () => {
-        setShowSuccessModal(false);
-        handleClose();
-    };
-
     const handleSubmit = async () => {
         if (!selectedCommunityId) {
             setToastMsg('Please select a community to post in.');
@@ -96,7 +90,7 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
                 images,
             });
 
-            setShowSuccessModal(true);
+            handleClose();
         } catch (error) {
             setToastMsg('Failed to create post. Please try again.');
             console.error(error);
@@ -289,30 +283,6 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
             </SafeAreaView>
 
 
-            {/* Success Modal */}
-            <Modal
-                visible={showSuccessModal}
-                transparent
-                animationType="fade"
-                statusBarTranslucent
-                onRequestClose={handleCloseSuccess}
-            >
-                <View style={styles.validationModalOverlay}>
-                    <View style={styles.validationModalContent}>
-                        <View style={[styles.validationIconContainer, { backgroundColor: colors.success + '20' }]}>
-                            <Check size={32} color={colors.success} />
-                        </View>
-                        <Text style={styles.validationTitle}>Post Created</Text>
-                        <Text style={styles.validationMessage}>Your post has been successfully published!</Text>
-                        <TouchableOpacity
-                            style={styles.validationButton}
-                            onPress={handleCloseSuccess}
-                        >
-                            <Text style={styles.validationButtonText}>Awesome</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
             <Toast message={toastMsg} onHide={() => setToastMsg(null)} />
         </Modal>
     );

@@ -3,8 +3,7 @@ import { useRouter } from 'expo-router';
 import { supabase, useAuth } from './AuthContext';
 import { Post, CreatePostDTO, Community, Channel } from '../types/database';
 import { Alert, Share } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
-import { decode } from 'base64-arraybuffer';
+import { uploadImage } from '../utils/image-upload';
 
 interface FeedContextType {
     posts: Post[];
@@ -21,6 +20,7 @@ interface FeedContextType {
     removePost: (postId: string) => void;
     sharePost: (post: Post) => Promise<void>;
     viewPost: (postId: string) => Promise<void>;
+    deletePost: (postId: string) => Promise<void>;
     refreshSinglePost: (postId: string) => Promise<void>;
     communities: Community[];
     channels: Channel[];
@@ -218,102 +218,164 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const createPost = async (dto: CreatePostDTO) => {
-        try {
-            if (!user) throw new Error('Not authenticated');
+        if (!user) return;
 
-            // Construct JSONB content payload
-            const contentPayload = typeof dto.content === 'string'
-                ? { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: dto.content }] }] }
-                : dto.content;
+        const tempId = `temp-${Date.now()}`;
+        
+        // Construct JSONB content payload
+        const contentPayload = typeof dto.content === 'string'
+            ? { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: dto.content.trim() }] }] }
+            : dto.content;
 
-            // 1. Insert Post
-            const { data: post, error: postError } = await supabase
-                .from('posts')
-                .insert({
-                    user_id: user.id,
-                    community_id: dto.community_id,
-                    title: dto.title || null,
-                    content: contentPayload,
-                    country: dto.country || 'India',
-                })
-                .select(`
-            *,
-            user:users(id, name, avatar_url),
-            community:communities(id, name, logo_url)
-        `)
-                .single();
+        // Optimistic UI Update
+        const tempPost: Post = {
+            id: tempId,
+            user_id: user.id,
+            community_id: dto.community_id,
+            title: dto.title || null,
+            content: contentPayload,
+            likes_count: 0,
+            comments_count: 0,
+            views_count: 0,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            user: { id: user.id, name: user.name || 'Anonymous', avatar_url: user.avatar_url || null } as any,
+            community: communities.find(c => c.id === dto.community_id) as any,
+            is_uploading: true,
+            local_image_urls: dto.images || [],
+            is_edited: false
+        };
 
-            if (postError) throw postError;
+        setPosts(prev => [tempPost, ...prev]);
 
-            // 2. Insert Images (if any)
-            if (dto.images && dto.images.length > 0) {
-                const finalImageUrls: string[] = [];
+        // Background Process
+        (async () => {
+            try {
+                // 1. Insert Post
+                const { data: post, error: postError } = await supabase
+                    .from('posts')
+                    .insert({
+                        user_id: user.id,
+                        community_id: dto.community_id,
+                        title: dto.title || null,
+                        content: contentPayload,
+                        country: dto.country || 'India',
+                    })
+                    .select(`
+                        *,
+                        user:users(id, name, avatar_url),
+                        community:communities(id, name, logo_url)
+                    `)
+                    .single();
 
-                // Upload each image sequentially to Supabase
-                for (let i = 0; i < dto.images.length; i++) {
-                    const localUri = dto.images[i];
+                if (postError) throw postError;
 
-                    if (!localUri.startsWith('http')) {
-                        const filename = `${user.id}_post_${Date.now()}_${i}.jpg`;
-                        const path = `posts/${filename}`;
-
-                        const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
-
-                        const { error: uploadError } = await supabase.storage
-                            .from('avatars') // Using same public bucket as profiles
-                            .upload(path, decode(base64), { contentType: 'image/jpeg' });
-
-                        if (uploadError) {
-                            console.error('Post Image Upload Error:', uploadError);
-                            // Fallback to local if upload totally fails, though this implies a larger issue
-                            finalImageUrls.push(localUri);
-                        } else {
-                            const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
-                            finalImageUrls.push(publicUrlData.publicUrl);
+                // 2. Upload and Insert Images
+                if (dto.images && dto.images.length > 0) {
+                    const uploadPromises = dto.images.map(async (localUri, index) => {
+                        if (!localUri.startsWith('http')) {
+                            const filename = `posts/${user.id}_${Date.now()}_${index}.jpg`;
+                            
+                            await uploadImage(localUri, filename);
+                            
+                            const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filename);
+                            return {
+                                post_id: post.id,
+                                image_url: publicUrlData.publicUrl,
+                                order_index: index
+                            };
                         }
-                    } else {
-                        // Already a web URL
-                        finalImageUrls.push(localUri);
+                        return { post_id: post.id, image_url: localUri, order_index: index };
+                    });
+
+                    const imageInserts = await Promise.all(uploadPromises);
+                    const { error: imgError } = await supabase.from('post_images').insert(imageInserts);
+                    if (imgError) console.error("Error inserting images", imgError);
+                    
+                    post.images = imageInserts;
+                }
+
+                // 3. Channels
+                if (dto.channel_ids && dto.channel_ids.length > 0) {
+                    const channelInserts = dto.channel_ids.map(channelId => ({
+                        post_id: post.id,
+                        channel_id: channelId
+                    }));
+                    await supabase.from('post_channels').insert(channelInserts);
+                }
+
+                // Replace optimistic post with real data and clear uploading flag
+                setPosts(current => current.map(p => p.id === tempId ? { ...post, is_uploading: false } : p));
+
+            } catch (error) {
+                console.error('Background Create Post Error:', error);
+                // Remove temp post on failure
+                setPosts(current => current.filter(p => p.id !== tempId));
+                Alert.alert("Error", "Failed to create post. Please try again.");
+            }
+        })();
+    };
+
+    const deletePost = async (postId: string) => {
+        // Capture original state for potential revert
+        const originalPosts = [...posts];
+        const postInList = posts.find(p => p.id === postId);
+
+        // 1. Optimistic UI update
+        removePost(postId);
+
+        // 2. Background cleanup
+        (async () => {
+            try {
+                // If we don't have post info (e.g. from shared link), fetch it for storage cleanup
+                let postToDelete = postInList;
+                if (!postToDelete) {
+                    const { data } = await supabase.from('posts').select('*, images:post_images(*)').eq('id', postId).single();
+                    if (data) postToDelete = data as any;
+                }
+
+                // 2.1 Storage Cleanup
+                if (postToDelete?.images && postToDelete.images.length > 0) {
+                    const filePaths = postToDelete.images.map((img: any) => {
+                        try {
+                            const urlObj = new URL(img.image_url);
+                            return urlObj.pathname.split('/').slice(-2).join('/');
+                        } catch { return null; }
+                    }).filter(Boolean) as string[];
+
+                    if (filePaths.length > 0) {
+                        supabase.storage.from('avatars').remove(filePaths).then();
                     }
                 }
 
-                const imageInserts = finalImageUrls.map((url, index) => ({
-                    post_id: post.id,
-                    image_url: url,
-                    order_index: index
-                }));
+                // 2.2 Deep Delete Related Data in order to respect FKs
+                // 1. Delete likes
+                await supabase.from('likes').delete().eq('post_id', postId);
+                
+                // 2. Delete comment likes first (deep)
+                const { data: comments } = await supabase.from('comments').select('id').eq('post_id', postId);
+                if (comments && comments.length > 0) {
+                    const commentIds = comments.map(c => c.id);
+                    await supabase.from('comment_likes').delete().in('comment_id', commentIds);
+                    // 3. Delete comments (including replies if they have the same post_id)
+                    await supabase.from('comments').delete().eq('post_id', postId);
+                }
 
-                const { error: imgError } = await supabase
-                    .from('post_images')
-                    .insert(imageInserts);
+                // 4. Delete images & channels
+                await supabase.from('post_images').delete().eq('post_id', postId);
+                await supabase.from('post_channels').delete().eq('post_id', postId);
 
-                if (imgError) console.error("Error inserting images", imgError);
+                // 5. Finally the post
+                const { error } = await supabase.from('posts').delete().eq('id', postId);
+                if (error) throw error;
 
-                // Attach images to local post object for UI update
-                post.images = imageInserts.map((img, idx) => ({ id: `temp-img-${idx}`, ...img }));
+                console.log(`Post ${postId} deleted successfully from server.`);
+            } catch (error) {
+                console.error("Background delete error:", error);
+                setPosts(originalPosts);
+                Alert.alert("Sync Error", "Failed to remove post from server. Restoring post.");
             }
-
-            // 3. Insert Channels (if any)
-            if (dto.channel_ids && dto.channel_ids.length > 0) {
-                const channelInserts = dto.channel_ids.map(channelId => ({
-                    post_id: post.id,
-                    channel_id: channelId
-                }));
-
-                const { error: chanError } = await supabase
-                    .from('post_channels')
-                    .insert(channelInserts);
-
-                if (chanError) console.error("Error inserting channels", chanError);
-            }
-
-            // Update Local State directly
-            setPosts(prev => [post, ...prev]);
-
-        } catch (error: any) {
-            console.error('Create Post Error:', error);
-            throw error;
-        }
+        })();
     };
 
     const likePost = async (postId: string) => {
@@ -507,6 +569,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             removePost,
             sharePost,
             viewPost,
+            deletePost,
             refreshSinglePost,
             communities,
             channels,

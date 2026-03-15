@@ -98,7 +98,7 @@ export default function RegisterScreen() {
     <>
       <Toast message={errorMsg} onHide={() => setErrorMsg(null)} />
       <LinearGradient
-        colors={[colors.primaryLight, colors.background, colors.secondaryLight]}
+        colors={[colors.primaryLight, colors.background, colors.accent]}
         style={styles.gradient}
       >
         <KeyboardShiftView style={styles.container}>
@@ -107,17 +107,14 @@ export default function RegisterScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.header}>
-              <View style={styles.logoContainer}>
-                {/* <View style={styles.logo}>
-                <View style={styles.logoPattern} />
-              </View> */}
+              {/* <View style={styles.logoContainer}>
                 <AnimatedImage
                   source={require('@/assets/images/logo/logo_light.svg')}
                   style={styles.logo}
                   contentFit="contain"
                 // tintColor="#FFFFFF"
                 />
-              </View>
+              </View> */}
               <Text style={styles.title}>Create Account</Text>
               <Text style={styles.subtitle}>Join Pentasent for better health</Text>
             </View>
@@ -231,13 +228,6 @@ const styles = StyleSheet.create({
     width: 55,
     height: 55,
   },
-  logoPattern: {
-    width: 50,
-    height: 50,
-    backgroundColor: colors.primaryLight,
-    borderRadius: borderRadius.md,
-    transform: [{ rotate: '45deg' }],
-  },
   title: {
     ...typography.h1,
     color: colors.primary,
@@ -250,7 +240,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   formContainer: {
-    backgroundColor: colors.surface + "90",
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
     shadowColor: colors.shadow,

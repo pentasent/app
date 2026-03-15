@@ -89,6 +89,8 @@ export interface Post {
     images?: PostImage[];
     channels?: Channel[]; // via post_channels
     user_has_liked?: boolean;
+    is_uploading?: boolean;
+    local_image_urls?: string[];
 }
 
 export interface PostImage {

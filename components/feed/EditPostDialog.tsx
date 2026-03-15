@@ -1,7 +1,7 @@
 import { CustomImage as Image } from '@/components/CustomImage';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Image as ImageIcon, X, ChevronDown } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, X, ChevronDown, Check } from 'lucide-react-native';
 import { colors } from '../../constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -74,6 +74,7 @@ export const EditPostDialog = ({ visible, onClose, onSubmit, initialTitle, initi
         setLoading(true);
         try {
             await onSubmit(title, content, images);
+            handleClose();
         } catch (error) {
             Alert.alert('Error', 'Failed to update post. Please try again.');
             console.error(error);

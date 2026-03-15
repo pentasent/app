@@ -109,7 +109,7 @@ export default function LoginScreen() {
     <>
       <Toast message={errorMsg} onHide={() => setErrorMsg(null)} />
       <LinearGradient
-        colors={[colors.primaryLight, colors.background, colors.secondaryLight]}
+        colors={[colors.primaryLight, colors.background, colors.accent]}
         style={styles.gradient}
       >
         <KeyboardShiftView style={styles.container}>
@@ -118,13 +118,13 @@ export default function LoginScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.header}>
-              <View style={styles.logoContainer}>
+              {/* <View style={styles.logoContainer}>
                 <AnimatedImage
                   source={require('@/assets/images/logo/logo_light.svg')}
                   style={styles.logo}
                   contentFit="contain"
                 />
-              </View>
+              </View> */}
               <Text style={styles.title}>Pentasent</Text>
               <Text style={styles.subtitle}>Take Back Control of Your Mind and Senses</Text>
             </View>
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   formContainer: {
-    backgroundColor: colors.surface + '90',
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
     shadowColor: colors.shadow,
