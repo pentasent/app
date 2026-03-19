@@ -1,34 +1,67 @@
 {
   "expo": {
     "name": "Pentasent",
-    "slug": "Pentasent",
+    "slug": "pentasent",
     "version": "1.0.0",
     "orientation": "portrait",
+
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true
+
+    "scheme": "pentasent",
+
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFBF7"
     },
-    "web": {
-      "bundler": "metro",
-      "output": "single",
-      "favicon": "./assets/images/favicon.png"
+
+    "android": {
+      "package": "com.pentasent.app",
+      "permissions": [
+        "INTERNET",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#FFFBF7"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "pentasent.com"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
+
     "plugins": [
       "expo-router",
       "expo-font",
       "expo-web-browser",
       "@react-native-community/datetimepicker",
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFBF7",
+          "image": "./assets/images/splash.png",
+          "resizeMode": "contain"
+        }
+      ]
     ],
-    "experiments": {
-      "typedRoutes": true
-    },
-    "android": {
-      "package": "com.ankit5999.pentasent",
-      "permissions": ["INTERNET"]
+
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ca5c2a04-8e6b-45e3-b18f-0b59f7ab16f1"
+      }
     }
   }
 }

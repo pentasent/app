@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CommunityCardShimmer } from '../../components/shimmers/CommunityCardShimmer';
 import { formatNumber } from '@/utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 
 const { width } = Dimensions.get('window');
 
@@ -114,7 +115,7 @@ export default function CommunityListingScreen() {
         >
             <View style={styles.cardBannerContainer}>
                 {item.banner_url ? (
-                    <Image source={{ uri: item.banner_url }} style={styles.cardBanner} resizeMode="cover" />
+                    <Image source={{ uri: getImageUrl(item.banner_url) }} style={styles.cardBanner} resizeMode="cover" />
                 ) : (
                     <LinearGradient
                         colors={[colors.primaryLight, colors.primary]}
@@ -123,7 +124,7 @@ export default function CommunityListingScreen() {
                 )}
                 <View style={[styles.cardLogoContainer, !item.logo_url && styles.placeholderLogo]}>
                     <Image
-                        source={{ uri: item.logo_url || 'https://via.placeholder.com/50' }}
+                        source={{ uri: getImageUrl(item.logo_url) }}
                         style={styles.cardLogo}
                     />
                 </View>

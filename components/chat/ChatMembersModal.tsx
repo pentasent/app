@@ -16,6 +16,7 @@ import { CommunityChatMember } from '@/types/database';
 import { StatusBar } from 'expo-status-bar';
 import { CommunityMemberShimmer } from '../shimmers/CommunityMemberShimmer';
 import { formatNumber } from '@/utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 
 interface ChatMembersModalProps {
     visible: boolean;
@@ -86,7 +87,7 @@ export const ChatMembersModal: React.FC<ChatMembersModalProps> = ({ visible, onC
             <View style={styles.memberRow}
             >
                 <Image
-                    source={{ uri: item.user?.avatar_url || 'https://via.placeholder.com/40' }}
+                    source={{ uri: getImageUrl(item.user?.avatar_url) }}
                     style={styles.avatar}
                 />
                 <View style={styles.memberInfo}>

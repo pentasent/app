@@ -6,6 +6,7 @@ import { colors, spacing, borderRadius } from '@/constants/theme';
 import { Play, BarChart2 } from 'lucide-react-native';
 import { formatNumber } from '@/utils/format';
 import { trackEvent } from '@/lib/analytics/track';
+import { getImageUrl } from '@/utils/get-image-url';
 
 interface BeatCardProps {
     beat: Beat;
@@ -33,7 +34,7 @@ export const BeatCard: React.FC<BeatCardProps> = ({ beat, onPlay }) => {
         >
             <View style={styles.imageContainer}>
                 <Image
-                    source={{ uri: beat.banner_url || 'https://via.placeholder.com/150' }}
+                    source={{ uri: getImageUrl(beat.banner_url) }}
                     style={styles.image}
                     onLoad={() => setImageLoaded(true)}
                 />

@@ -16,6 +16,7 @@ import { CloudUpload } from 'lucide-react-native';
 import { DotsLoader } from '../DotsLoader';
 
 import { formatNumber } from '../../utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 
 interface PostCardProps {
     post: Post;
@@ -50,7 +51,7 @@ export const PostCard = ({ post, onPress, onLike, onComment, onShare, onMore }: 
                 <View style={styles.header}>
                     <View style={styles.userInfo}>
                         <Image
-                            source={{ uri: post.user?.avatar_url || 'https://via.placeholder.com/40' }}
+                            source={{ uri: getImageUrl(post.user?.avatar_url) }}
                             style={styles.avatar}
                         />
                         <View>
@@ -87,7 +88,7 @@ export const PostCard = ({ post, onPress, onLike, onComment, onShare, onMore }: 
                 {(post.images && post.images.length > 0) || (post.is_uploading && post.local_image_urls && post.local_image_urls.length > 0) ? (
                     <View style={styles.mediaWrapper}>
                         <Image
-                            source={{ uri: (post.images?.[0]?.image_url) || (post.local_image_urls?.[0]) }}
+                            source={{ uri: getImageUrl(post.images?.[0]?.image_url || post.local_image_urls?.[0]) }}
                             style={styles.postImage}
                             resizeMode="cover"
                         />

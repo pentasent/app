@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ProductCardShimmer } from '@/components/shimmers/ProductCardShimmer';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
 import { formatNumber } from '@/utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 
 export default function ProductsScreen() {
     const router = useRouter();
@@ -132,7 +133,7 @@ export default function ProductsScreen() {
                 activeOpacity={0.7}
             >
                 <Image
-                    source={{ uri: item.image_url || 'https://via.placeholder.com/150' }}
+                    source={{ uri: getImageUrl(item.image_url) }}
                     style={styles.productImage}
                     resizeMode="cover"
                 />

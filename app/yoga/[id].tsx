@@ -10,6 +10,7 @@ import { YogaContent, YogaImage, YogaSuggestedVideo } from '@/types/database';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { formatNumber } from '@/utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 import { YogaDetailShimmer } from '@/components/shimmers/YogaDetailShimmer';
 
 const { width } = Dimensions.get('window');
@@ -200,7 +201,7 @@ export default function YogaDetailScreen() {
                 {/* Banner */}
                 <View style={styles.bannerContainer}>
                     {yoga.banner_image_url ? (
-                        <Image source={{ uri: yoga.banner_image_url }} style={styles.banner} resizeMode="cover" />
+                        <Image source={{ uri: getImageUrl(yoga.banner_image_url) }} style={styles.banner} resizeMode="cover" />
                     ) : (
                         <LinearGradient
                             colors={[colors.primary, colors.primaryDark]}
@@ -282,7 +283,7 @@ export default function YogaDetailScreen() {
                                     <View key={img.id} style={{ marginRight: (images.length > 1 && index !== images.length - 1) ? 12 : 0, width: images.length === 1 ? '100%' : undefined }}>
                                         <TouchableOpacity onPress={() => setFullScreenImage(img.image_url)}>
                                             <Image
-                                                source={{ uri: img.image_url }}
+                                                source={{ uri: getImageUrl(img.image_url) }}
                                                 style={
                                                     images.length === 1
                                                         ? styles.singleImage

@@ -10,6 +10,7 @@ import { YogaContent } from '@/types/database';
 import { LinearGradient } from 'expo-linear-gradient';
 import { formatNumber } from '../../utils/format';
 import { YogaCardShimmer } from '@/components/shimmers/YogaCardShimmer';
+import { getImageUrl } from '@/utils/get-image-url';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - (spacing.lg * 2);
@@ -65,7 +66,7 @@ export default function YogaListingScreen() {
         >
             <View style={styles.cardImageContainer}>
                 {item.banner_image_url ? (
-                    <Image source={{ uri: item.banner_image_url }} style={styles.cardImage} resizeMode="cover" />
+                    <Image source={{ uri: getImageUrl(item.banner_image_url) }} style={styles.cardImage} resizeMode="cover" />
                 ) : (
                     <LinearGradient
                         colors={[colors.primaryLight, colors.primary]}

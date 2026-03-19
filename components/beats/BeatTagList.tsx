@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground } from 'react-native';
 import { BeatTag } from '@/types';
 import { colors, spacing, borderRadius, shadows } from '@/constants/theme';
+import { getImageUrl } from '@/utils/get-image-url';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface BeatTagListProps {
@@ -51,7 +52,7 @@ export const BeatTagList: React.FC<BeatTagListProps> = ({ tags, selectedTag, onS
                     activeOpacity={0.8}
                 >
                     <ImageBackground
-                        source={{ uri: tag.icon_url || 'https://via.placeholder.com/150' }}
+                        source={{ uri: getImageUrl(tag.icon_url) }}
                         style={styles.cardBackground}
                         imageStyle={styles.cardImage}
                     >

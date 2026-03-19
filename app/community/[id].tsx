@@ -14,6 +14,7 @@ import { CommunityDetailShimmer } from '../../components/shimmers/CommunityDetai
 import { Toast } from '../../components/Toast';
 import { useApp } from '../../contexts/AppContext';
 import { formatNumber } from '@/utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 
 export default function CommunityDetailScreen() {
     const { id, name, description, logo_url, banner_url, followers_count } = useLocalSearchParams();
@@ -494,7 +495,7 @@ export default function CommunityDetailScreen() {
             <Animated.View style={{ opacity: headerFadeAnim }}>
                 <View style={styles.bannerContainer}>
                     {community.banner_url || loading ? (
-                        <Image source={community.banner_url ? { uri: community.banner_url } : undefined} style={styles.banner} />
+                        <Image source={community.banner_url ? { uri: getImageUrl(community.banner_url) } : undefined} style={styles.banner} />
                     ) : (
                         <LinearGradient
                             colors={[colors.primary, colors.primaryDark]}
@@ -515,7 +516,7 @@ export default function CommunityDetailScreen() {
                     <View style={styles.headerInfo}>
                         <View style={styles.logoWrapper}>
                             <Image
-                                source={community.logo_url ? { uri: community.logo_url } : undefined}
+                                source={community.logo_url ? { uri: getImageUrl(community.logo_url) } : undefined}
                                 style={styles.logo}
                             />
                         </View>
@@ -625,7 +626,7 @@ export default function CommunityDetailScreen() {
                                     moderators.map((mod, index) => (
                                         <View key={index} style={styles.moderatorCard}>
                                             <Image
-                                                source={{ uri: mod.user.avatar_url || 'https://via.placeholder.com/40' }}
+                                                source={{ uri: getImageUrl(mod.user.avatar_url) }}
                                                 style={styles.modAvatar}
                                             />
                                             <View style={{ flex: 1 }}>

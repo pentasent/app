@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { ChatCardShimmer } from '../../components/shimmers/ChatCardShimmer';
 import { formatNumber } from '@/utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 
 // Combined type for display
 type ChatItem = CommunityChat & {
@@ -242,7 +243,7 @@ export default function ChatListScreen() {
             activeOpacity={0.7}
         >
             <Image
-                source={{ uri: item.community.logo_url || 'https://via.placeholder.com/50' }}
+                source={{ uri: getImageUrl(item.community.logo_url) }}
                 style={styles.communityLogo}
             />
 

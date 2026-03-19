@@ -7,11 +7,12 @@ import { colors, borderRadius, spacing } from '../../constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '../../contexts/AuthContext';
+import { supabase, useAuth } from '../../contexts/AuthContext';
 import { User } from '../../types/database';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { COUNTRIES } from '@/lib/country';
+import { getImageUrl } from '@/utils/get-image-url';
 
 interface EditProfileDialogProps {
     visible: boolean;
@@ -78,6 +79,8 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
         }
     };
 
+    const { updateProfile } = useAuth();
+
     const handleSubmit = async () => {
         if (!currentUser) return;
         if (!name.trim()) {
@@ -95,54 +98,19 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
 
         setLoading(true);
         try {
-            let finalAvatarUrl = avatarUrl;
-
-            // Upload Image if it's a local URI
-            if (avatarUrl && !avatarUrl.startsWith('http')) {
-                const filename = `${currentUser.id}_${Date.now()}.jpg`;
-                const path = `avatars/${filename}`;
-
-                const base64 = await FileSystem.readAsStringAsync(avatarUrl, { encoding: 'base64' });
-
-                const { error: uploadError } = await supabase.storage
-                    .from('avatars')
-                    .upload(path, decode(base64), { contentType: 'image/jpeg' });
-
-                if (uploadError) {
-                    console.error('Upload Error:', uploadError);
-                    // Fallback: try 'public' or just alert
-                    // If bucket doesn't exist, this will fail. For MVP, assuming 'avatars' or similar.
-                    // User didn't specify bucket. I'll use 'avatars' and if it fails, I might need to create it or use existing.
-                    throw new Error('Failed to upload avatar. Ensure "avatars" bucket exists.');
-                }
-
-                const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
-                finalAvatarUrl = publicUrlData.publicUrl;
-            }
-
-            const { error } = await supabase
-                .from('users')
-                .update({
-                    name: name.trim(),
-                    country: country?.label || null,
-                    bio: bio.trim(),
-                    avatar_url: finalAvatarUrl
-                })
-                .eq('id', currentUser.id);
-
-            if (error) throw error;
+            await updateProfile({
+                name: name.trim(),
+                bio: bio.trim(),
+                country: country.label,
+                avatar_uri: avatarUrl === currentUser.avatar_url ? undefined : avatarUrl || undefined
+            });
 
             setToastMsg('Profile updated successfully.');
-            onUpdate(); // Refresh data
+            onUpdate(); // Refresh stats in parent
 
-            // Delay closing to let the toast show, or just close and the parent handles it?
-            // Usually, if we close immediately, the toast inside the modal disappears.
-            // But we pass onUpdate which might trigger a re-render.
-            // A safer approach is to maybe let the parent show the success but the task asked to show the custom toster in EditProfileDialog. 
-            // We'll delay the close slightly to let them read "Success".
             setTimeout(() => {
                 onClose();
-            }, 1500);
+            }, 1000);
 
         } catch (error: any) {
             setToastMsg(error.message || 'Failed to update profile.');
@@ -186,7 +154,7 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
                                 <View style={styles.avatarSection}>
                                     <TouchableOpacity onPress={pickImage} style={styles.avatarWrapper}>
                                         <Image
-                                            source={{ uri: avatarUrl || 'https://via.placeholder.com/150' }}
+                                            source={{ uri: getImageUrl(avatarUrl) }}
                                             style={styles.avatar}
                                         />
                                         <View style={styles.cameraIcon}>

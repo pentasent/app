@@ -7,6 +7,7 @@ import { Comment } from '../../types/database';
 import { parseContent } from '../../utils/content';
 import { CommentShimmer } from '../shimmers/CommentShimmer';
 import { formatNumber } from '@/utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 
 interface CommentSectionProps {
     comments: Comment[];
@@ -33,7 +34,7 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
     const renderComment = ({ item }: { item: Comment }) => (
         <View style={styles.commentContainer}>
             <Image
-                source={{ uri: item.user?.avatar_url || 'https://via.placeholder.com/32' }}
+                source={{ uri: getImageUrl(item.user?.avatar_url) }}
                 style={styles.avatar}
             />
             <View style={styles.commentContent}>
@@ -94,7 +95,7 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
 
                                                 <View style={styles.replyItem}>
                                                     <Image
-                                                        source={{ uri: reply.user?.avatar_url || 'https://via.placeholder.com/24' }}
+                                                        source={{ uri: getImageUrl(reply.user?.avatar_url) }}
                                                         style={styles.replyAvatar}
                                                     />
                                                     <View style={{ flex: 1 }}>

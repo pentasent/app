@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { Meditation } from '../../types/database';
+import { getImageUrl } from '@/utils/get-image-url';
 
 const { width } = Dimensions.get('window');
 
@@ -67,8 +68,8 @@ export default function MeditationScreen() {
                     const mappedSounds: SoundOption[] = data.map((item: Meditation) => ({
                         id: item.id,
                         title: item.title,
-                        uri: item.audio_url,
-                        image: item.banner_url || 'https://api.pentasent.com/storage/v1/object/public/avatars/placeholders/meditation_background.png',
+                        uri: getImageUrl(item.audio_url),
+                        image: getImageUrl(item.banner_url),
                     }));
                     setSounds(mappedSounds);
                     setSelectedSound(mappedSounds[0]);
@@ -222,7 +223,7 @@ export default function MeditationScreen() {
             <StatusBar style="light" />
             <View style={styles.backgroundContainer}>
                 <RNImage
-                    source={{ uri: 'https://api.pentasent.com/storage/v1/object/public/avatars/placeholders/meditation_background.png' }}
+                    source={{ uri: getImageUrl('placeholders/meditation_background.png') }}
                     style={styles.backgroundImage}
                     resizeMode="cover"
                 />

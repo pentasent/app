@@ -34,6 +34,7 @@ import { EditProfileDialog } from '../../components/profile/EditProfileDialog';
 import { WavePattern } from '@/components/profile/WavePattern';
 import { useRouter } from 'expo-router';
 import { formatNumber } from '@/utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -162,7 +163,7 @@ export default function ProfileScreen() {
           <View style={styles.headerSection}>
             <View style={styles.avatarContainer}>
               <Image
-                source={{ uri: localUser?.avatar_url || 'https://api.pentasent.com/storage/v1/object/public/avatars/placeholders/icon.png' }}
+                source={{ uri: getImageUrl(localUser?.avatar_url) }}
                 style={styles.avatar}
               />
             </View>

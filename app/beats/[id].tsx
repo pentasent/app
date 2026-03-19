@@ -11,6 +11,7 @@ import { colors, spacing, borderRadius } from '../../constants/theme';
 import { supabase } from '../../contexts/AuthContext';
 import { Beat } from '../../types';
 import { BeatDetailShimmer } from '../../components/shimmers/BeatDetailShimmer';
+import { getImageUrl } from '@/utils/get-image-url';
 
 const { width } = Dimensions.get('window');
 
@@ -22,7 +23,7 @@ export default function BeatsPlayerScreen() {
     const [error, setError] = useState<string | null>(null);
 
     // Audio Player
-    const player = useAudioPlayer(beat?.audio_url || null);
+    const player = useAudioPlayer(getImageUrl(beat?.audio_url) || null);
     const status = useAudioPlayerStatus(player);
 
     // Status (expo-audio status object)
@@ -106,7 +107,7 @@ export default function BeatsPlayerScreen() {
     return (
         <View style={styles.container}>
             <ImageBackground
-                source={{ uri: beat.banner_url || 'https://via.placeholder.com/800' }}
+                source={{ uri: getImageUrl(beat.banner_url) }}
                 style={styles.backgroundImage}
                 blurRadius={20} // Optional blur for background feel
             >
@@ -130,7 +131,7 @@ export default function BeatsPlayerScreen() {
                     {/* Main Cover Art */}
                     <View style={styles.coverContainer}>
                         <Image
-                            source={{ uri: beat.banner_url || 'https://via.placeholder.com/400' }}
+                            source={{ uri: getImageUrl(beat.banner_url) }}
                             style={styles.coverImage}
                         />
                     </View>

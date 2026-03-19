@@ -5,6 +5,7 @@ import { colors } from '../../constants/theme';
 import { User, Community } from '../../types/database';
 import { MapPin, ChevronDown, Check } from 'lucide-react-native'; // Assuming lucide-react-native is available
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getImageUrl } from '@/utils/get-image-url';
 
 interface FeedHeaderProps {
     user: User | null;
@@ -36,7 +37,7 @@ export const FeedHeader: React.FC<FeedHeaderProps> = ({
                 }}
             >
                 {item?.logo_url ? (
-                    <Image source={{ uri: item.logo_url }} style={styles.communityLogoSmall} />
+                    <Image source={{ uri: getImageUrl(item.logo_url) }} style={styles.communityLogoSmall} />
                 ) : (
                     <View style={[styles.communityLogoPlaceholder, { backgroundColor: isSelected ? colors.primary : '#eee' }]} />
                 )}
@@ -54,7 +55,7 @@ export const FeedHeader: React.FC<FeedHeaderProps> = ({
                 {/* Left: User Profile */}
                 <TouchableOpacity style={styles.profileSection} onPress={onProfilePress}>
                     <Image
-                        source={{ uri: user?.avatar_url || 'https://api.pentasent.com/storage/v1/object/public/avatars/placeholders/icon.png' }}
+                        source={{ uri: getImageUrl(user?.avatar_url) }}
                         style={styles.avatar}
                     />
                     <View style={styles.profileInfo}>
@@ -76,7 +77,7 @@ export const FeedHeader: React.FC<FeedHeaderProps> = ({
                     onPress={() => setIsCommunityModalOpen(true)}
                 >
                     {selectedCommunity && selectedCommunity.logo_url && (
-                        <Image source={{ uri: selectedCommunity.logo_url }} style={styles.selectedCommunityLogo} />
+                        <Image source={{ uri: getImageUrl(selectedCommunity.logo_url) }} style={styles.selectedCommunityLogo} />
                     )}
                     <Text style={styles.filterButtonText} numberOfLines={1}>
                         {selectedCommunity ? selectedCommunity.name : 'All Communities'}

@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Community, Channel } from '../../types/database';
 import { Toast } from '@/components/Toast';
+import { getImageUrl } from '@/utils/get-image-url';
 
 interface EditPostDialogProps {
     visible: boolean;
@@ -38,7 +39,7 @@ export const EditPostDialog = ({ visible, onClose, onSubmit, initialTitle, initi
             setContent(initialContent);
             setImages(initialImages);
         }
-    }, [visible, initialTitle, initialContent, initialImages]);
+    }, [visible]);
 
     const handleClose = () => {
         onClose();
@@ -113,7 +114,7 @@ export const EditPostDialog = ({ visible, onClose, onSubmit, initialTitle, initi
                                 <View style={[styles.selector, styles.disabledSelector]}>
                                     <View style={styles.selectorMain}>
                                         {community?.logo_url ? (
-                                            <Image source={{ uri: community.logo_url }} style={styles.commLogo} />
+                                            <Image source={{ uri: getImageUrl(community.logo_url) }} style={styles.commLogo} />
                                         ) : (
                                             <View style={styles.commPlaceholder} />
                                         )}
@@ -146,7 +147,7 @@ export const EditPostDialog = ({ visible, onClose, onSubmit, initialTitle, initi
                                 <ScrollView horizontal style={styles.smallPreviewContainer} showsHorizontalScrollIndicator={false}>
                                     {images.map((img, idx) => (
                                         <View key={idx} style={styles.smallImageWrapper}>
-                                            <Image source={{ uri: img }} style={styles.smallPreviewImg} />
+                                            <Image source={{ uri: getImageUrl(img) }} style={styles.smallPreviewImg} />
                                             <TouchableOpacity
                                                 style={styles.smallRemoveBtn}
                                                 onPress={() => setImages(prev => prev.filter((_, i) => i !== idx))}

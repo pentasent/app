@@ -11,6 +11,7 @@ import { CustomImage as Image } from '../components/CustomImage';
 import { Check, Users } from 'lucide-react-native';
 import { OnboardingCommunityShimmer } from '../components/shimmers/OnboardingCommunityShimmer';
 import { trackEvent } from '../lib/analytics/track';
+import { getImageUrl } from '@/utils/get-image-url';
 
 export default function OnboardingCommunitiesScreen() {
     const { user, refreshUser } = useAuth();
@@ -180,7 +181,7 @@ export default function OnboardingCommunitiesScreen() {
                             activeOpacity={0.8}
                         >
                             <Image
-                                source={{ uri: item.logo_url || 'https://via.placeholder.com/150' }}
+                                source={{ uri: getImageUrl(item.logo_url) }}
                                 style={styles.logo}
                             />
                             <View style={styles.info}>

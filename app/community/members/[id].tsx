@@ -8,6 +8,7 @@ import { Search, ArrowLeft, Trash2, UserPlus, Shield } from 'lucide-react-native
 import { useAuth } from '@/contexts/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { CommunityMemberShimmer } from '@/components/shimmers/CommunityMemberShimmer';
+import { getImageUrl } from '@/utils/get-image-url';
 
 type Member = {
     id: string; // Follower ID (not user ID directly in this context if we want to delete relation)
@@ -215,7 +216,7 @@ export default function CommunityMembersScreen() {
             return (
                 <View style={styles.memberCard}>
                     <Image
-                        source={{ uri: item.avatar_url || 'https://via.placeholder.com/50' }}
+                        source={{ uri: getImageUrl(item.avatar_url) }}
                         style={styles.avatar}
                     />
                     <View style={styles.memberInfo}>
@@ -238,7 +239,7 @@ export default function CommunityMembersScreen() {
         return (
             <View style={styles.memberCard}>
                 <Image
-                    source={{ uri: item.user.avatar_url || 'https://via.placeholder.com/50' }}
+                    source={{ uri: getImageUrl(item.user.avatar_url) }}
                     style={styles.avatar}
                 />
                 <View style={styles.memberInfo}>

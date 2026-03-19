@@ -228,6 +228,14 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : dto.content;
 
         // Optimistic UI Update
+        // Create optimistic images list
+        const tempImages = (dto.images || []).map((uri, i) => ({
+            id: `temp-img-${Date.now()}-${i}`,
+            image_url: uri,
+            post_id: tempId,
+            order_index: i
+        }));
+        
         const tempPost: Post = {
             id: tempId,
             user_id: user.id,
@@ -241,6 +249,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             created_at: new Date().toISOString(),
             user: { id: user.id, name: user.name || 'Anonymous', avatar_url: user.avatar_url || null } as any,
             community: communities.find(c => c.id === dto.community_id) as any,
+            images: tempImages as any,
             is_uploading: true,
             local_image_urls: dto.images || [],
             is_edited: false
@@ -273,15 +282,14 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // 2. Upload and Insert Images
                 if (dto.images && dto.images.length > 0) {
                     const uploadPromises = dto.images.map(async (localUri, index) => {
-                        if (!localUri.startsWith('http')) {
+                        if (localUri.startsWith('file') || localUri.startsWith('content')) {
                             const filename = `posts/${user.id}_${Date.now()}_${index}.jpg`;
                             
                             await uploadImage(localUri, filename);
                             
-                            const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filename);
                             return {
                                 post_id: post.id,
-                                image_url: publicUrlData.publicUrl,
+                                image_url: filename,
                                 order_index: index
                             };
                         }
@@ -305,7 +313,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
 
                 // Replace optimistic post with real data and clear uploading flag
-                setPosts(current => current.map(p => p.id === tempId ? { ...post, is_uploading: false } : p));
+                setPosts(current => current.map(p => p.id === tempId ? { ...tempPost, ...post, is_uploading: false, _tempId: tempId } : p));
 
             } catch (error) {
                 console.error('Background Create Post Error:', error);
@@ -319,28 +327,31 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const deletePost = async (postId: string) => {
         // Capture original state for potential revert
         const originalPosts = [...posts];
-        const postInList = posts.find(p => p.id === postId);
+        const postToDelete = posts.find(p => p.id === postId || (p as any)._tempId === postId);
+        const resolvedId = postToDelete?.id || postId;
 
         // 1. Optimistic UI update
-        removePost(postId);
+        setPosts(prev => prev.filter(p => p.id !== postId && (p as any)._tempId !== postId));
+
+        if (resolvedId.startsWith('temp-')) {
+            // It was never on the server, just stop here
+            return;
+        }
 
         // 2. Background cleanup
         (async () => {
             try {
                 // If we don't have post info (e.g. from shared link), fetch it for storage cleanup
-                let postToDelete = postInList;
-                if (!postToDelete) {
-                    const { data } = await supabase.from('posts').select('*, images:post_images(*)').eq('id', postId).single();
-                    if (data) postToDelete = data as any;
+                let fullPostData = postToDelete;
+                if (!fullPostData) {
+                    const { data } = await supabase.from('posts').select('*, images:post_images(*)').eq('id', resolvedId).single();
+                    if (data) fullPostData = data as any;
                 }
 
                 // 2.1 Storage Cleanup
                 if (postToDelete?.images && postToDelete.images.length > 0) {
                     const filePaths = postToDelete.images.map((img: any) => {
-                        try {
-                            const urlObj = new URL(img.image_url);
-                            return urlObj.pathname.split('/').slice(-2).join('/');
-                        } catch { return null; }
+                        return img.image_url;
                     }).filter(Boolean) as string[];
 
                     if (filePaths.length > 0) {
@@ -350,23 +361,23 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 // 2.2 Deep Delete Related Data in order to respect FKs
                 // 1. Delete likes
-                await supabase.from('likes').delete().eq('post_id', postId);
+                await supabase.from('likes').delete().eq('post_id', resolvedId);
                 
                 // 2. Delete comment likes first (deep)
-                const { data: comments } = await supabase.from('comments').select('id').eq('post_id', postId);
+                const { data: comments } = await supabase.from('comments').select('id').eq('post_id', resolvedId);
                 if (comments && comments.length > 0) {
                     const commentIds = comments.map(c => c.id);
                     await supabase.from('comment_likes').delete().in('comment_id', commentIds);
-                    // 3. Delete comments (including replies if they have the same post_id)
-                    await supabase.from('comments').delete().eq('post_id', postId);
+                    // 3. Delete comments
+                    await supabase.from('comments').delete().in('id', commentIds);
                 }
 
                 // 4. Delete images & channels
-                await supabase.from('post_images').delete().eq('post_id', postId);
-                await supabase.from('post_channels').delete().eq('post_id', postId);
+                await supabase.from('post_images').delete().eq('post_id', resolvedId);
+                await supabase.from('post_channels').delete().eq('post_id', resolvedId);
 
-                // 5. Finally the post
-                const { error } = await supabase.from('posts').delete().eq('id', postId);
+                // 5. Finalize by deleting the post itself
+                const { error } = await supabase.from('posts').delete().eq('id', resolvedId);
                 if (error) throw error;
 
                 console.log(`Post ${postId} deleted successfully from server.`);
@@ -443,7 +454,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatePost = (postId: string, changes: Partial<Post>) => {
         setPosts(current =>
             current.map(p =>
-                p.id === postId
+                (p.id === postId || (p as any)._tempId === postId)
                     ? { ...p, ...changes }
                     : p
             )
@@ -451,7 +462,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const removePost = useCallback((postId: string) => {
-        setPosts(current => current.filter(p => p.id !== postId));
+        setPosts(current => current.filter(p => p.id !== postId && (p as any)._tempId !== postId));
     }, []);
 
     const viewPost = async (postId: string) => {
@@ -473,6 +484,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const refreshSinglePost = async (postId: string) => {
+        if (!postId || postId.startsWith('temp-')) return;
         try {
             const { data, error } = await supabase
                 .from('posts')

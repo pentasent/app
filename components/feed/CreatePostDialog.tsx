@@ -8,6 +8,7 @@ import { Community, Channel } from '../../types/database';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Toast } from '@/components/Toast';
+import { getImageUrl } from '@/utils/get-image-url';
 
 
 interface CreatePostDialogProps {
@@ -148,7 +149,7 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
                                 >
                                     <View style={styles.selectorMain}>
                                         {selectedCommunity?.logo_url ? (
-                                            <Image source={{ uri: selectedCommunity.logo_url }} style={styles.commLogo} />
+                                            <Image source={{ uri: getImageUrl(selectedCommunity.logo_url) }} style={styles.commLogo} />
                                         ) : (
                                             <View style={styles.commPlaceholder} />
                                         )}
@@ -175,7 +176,7 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
                                                 >
                                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                                         {comm.logo_url ? (
-                                                            <Image source={{ uri: comm.logo_url }} style={styles.communityPickerLogo} />
+                                                            <Image source={{ uri: getImageUrl(comm.logo_url) }} style={styles.communityPickerLogo} />
                                                         ) : (
                                                             <View style={styles.communityPickerPlaceholder} />
                                                         )}
@@ -241,7 +242,7 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
                                 <ScrollView horizontal style={styles.smallPreviewContainer} showsHorizontalScrollIndicator={false}>
                                     {images.map((img, idx) => (
                                         <View key={idx} style={styles.smallImageWrapper}>
-                                            <Image source={{ uri: img }} style={styles.smallPreviewImg} />
+                                            <Image source={{ uri: getImageUrl(img) }} style={styles.smallPreviewImg} />
                                             <TouchableOpacity
                                                 style={styles.smallRemoveBtn}
                                                 onPress={() => setImages(prev => prev.filter((_, i) => i !== idx))}

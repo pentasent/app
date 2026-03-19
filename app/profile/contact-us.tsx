@@ -15,6 +15,7 @@ import {
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../../contexts/AuthContext';
+import { getImageUrl } from '@/utils/get-image-url';
 import { CustomImage as Image } from '../../components/CustomImage';
 
 export default function ContactUsScreen() {
@@ -60,7 +61,7 @@ export default function ContactUsScreen() {
                         style={styles.profileImageContainer}
                     >
                         <Image
-                            source={{ uri: user?.avatar_url || 'https://via.placeholder.com/50' }}
+                            source={{ uri: getImageUrl(user?.avatar_url) }}
                             style={styles.headerAvatar}
                         />
                     </TouchableOpacity>

@@ -45,6 +45,7 @@ export default function CommunityFeedScreen() {
   const [editingPost, setEditingPost] = React.useState<any>(null);
   const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   
   // Import supabase from AuthContext
   const { supabase } = require('../../contexts/AuthContext');
@@ -52,13 +53,33 @@ export default function CommunityFeedScreen() {
   // Actually, I'll just use the context updatePost for now or implement edit in context if I want to be thorough.
   // For now I'll just handle it here similar to how [id].tsx did but slightly cleaner.
   
-  const handleEditSubmit = async (title: string, content: string, images: string[]) => {
+  const handleCreatePost = async (dto: any) => {
+    try {
+      await createPost(dto);
+      setToastType('success');
+      setToastMsg('Post created successfully');
+    } catch (e) {
+      setToastType('error');
+      setToastMsg('Failed to create post');
+    }
+  };
+
+  const handleEditSubmit = async (
+    title: string,
+    content: string,
+    images: string[],
+  ) => {
     try {
       if (!editingPost) return;
-      
+
       const contentPayload = {
         type: 'doc',
-        content: [{ type: 'paragraph', content: [{ type: 'text', text: content.trim() }] }]
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: content.trim() }],
+          },
+        ],
       };
 
       const { error: postError } = await supabase
@@ -71,14 +92,20 @@ export default function CommunityFeedScreen() {
       // Handle images (simplifying for feed edit, ideally move to context)
       // I'll skip the complex image logic here or just refresh the feed.
       // Easiest is to refresh or update local state.
-      
+
       const { updatePost } = useFeed(); // re-access to be safe
-      updatePost(editingPost.id, { title, content: contentPayload, is_edited: true });
-      
+      updatePost(editingPost.id, {
+        title,
+        content: contentPayload,
+        is_edited: true,
+      });
+
       setIsEditModalOpen(false);
       setEditingPost(null);
-      setToastMsg("Post updated successfully");
+      setToastType('success');
+      setToastMsg('Post updated successfully');
     } catch (e) {
+      setToastType('error');
       console.error(e);
       throw e;
     }
@@ -95,7 +122,11 @@ export default function CommunityFeedScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Toast message={toastMsg} onHide={() => setToastMsg(null)} />
+      <Toast
+        message={toastMsg}
+        onHide={() => setToastMsg(null)}
+        type={toastType}
+      />
       {loading && !refreshing && posts.length === 0 ? (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
           <FeedHeader
@@ -180,7 +211,7 @@ export default function CommunityFeedScreen() {
       <CreatePostDialog
         visible={isCreatePostOpen}
         onClose={() => setIsCreatePostOpen(false)}
-        onSubmit={createPost}
+        onSubmit={handleCreatePost}
         communities={communities}
         channels={channels}
       />

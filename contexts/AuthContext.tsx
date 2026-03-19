@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { User } from '../types/database';
+import { uploadImage } from '../utils/image-upload';
 
 export { supabase };
 
@@ -14,6 +15,13 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  updateProfile: (updates: {
+    name?: string;
+    bio?: string;
+    country?: string;
+    avatar_uri?: string;
+    is_onboarded?: boolean;
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -219,8 +227,82 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
     }
   };
 
+  const updateProfile = async (updates: {
+    name?: string;
+    bio?: string;
+    country?: string;
+    avatar_uri?: string;
+    is_onboarded?: boolean;
+  }) => {
+    if (!user) return;
+
+    // 1. Optimistic UI update
+    const optimisticUser = {
+      ...user,
+      ...updates,
+      avatar_url: updates.avatar_uri || user.avatar_url, // Use local URI as preview
+    };
+    setUser(optimisticUser);
+
+    // 2. Background Process
+    (async () => {
+      try {
+        let finalAvatarUrl = user.avatar_url;
+
+        // If it's a new local image, upload it
+        if (
+          updates.avatar_uri &&
+          (updates.avatar_uri.startsWith('file') ||
+            updates.avatar_uri.startsWith('content'))
+        ) {
+          const filename = `avatars/${user.id}_${Date.now()}.jpg`;
+          const uploadResult = await uploadImage(updates.avatar_uri, filename);
+          if (uploadResult) {
+            finalAvatarUrl = filename;
+          }
+        }
+
+        const { error } = await supabase
+          .from('users')
+          .update({
+            name: updates.name !== undefined ? updates.name : user.name,
+            bio: updates.bio !== undefined ? updates.bio : user.bio,
+            country:
+              updates.country !== undefined ? updates.country : user.country,
+            avatar_url: finalAvatarUrl,
+            is_onboarded:
+              updates.is_onboarded !== undefined
+                ? updates.is_onboarded
+                : user.is_onboarded,
+          })
+          .eq('id', user.id);
+
+        if (error) throw error;
+
+        // Refresh to get final server state
+        await refreshUser();
+      } catch (error) {
+        console.error('Background Profile Update Failed:', error);
+        // On failure, revert optimistic update
+        await refreshUser();
+      }
+    })();
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isAdmin, loading, login, register, logout, refreshUser, resetPassword }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAdmin,
+        loading,
+        login,
+        register,
+        logout,
+        refreshUser,
+        resetPassword,
+        updateProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

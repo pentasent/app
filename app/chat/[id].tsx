@@ -31,6 +31,7 @@ import { StatusBar } from 'expo-status-bar';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
 import { CommunityChatDetailShimmer } from '@/components/shimmers/CommunityChatDetailShimmer';
 import { formatNumber } from '@/utils/format';
+import { getImageUrl } from '@/utils/get-image-url';
 
 type MessageWithUser = CommunityChatMessage & {
   user: User;
@@ -614,7 +615,7 @@ export default function ChatDetailScreen() {
         >
           {!isMe && (
             <Image
-              source={{ uri: item.user?.avatar_url || 'https://via.placeholder.com/30' }}
+              source={{ uri: getImageUrl(item.user?.avatar_url) }}
               style={styles.avatar}
             />
           )}
@@ -698,7 +699,7 @@ export default function ChatDetailScreen() {
             onPress={() => setMembersModalVisible(true)}
           >
             <Image
-              source={{ uri: chat.community?.logo_url || 'https://via.placeholder.com/40' }}
+              source={{ uri: getImageUrl(chat.community?.logo_url) }}
               style={styles.headerLogo}
             />
             <View>

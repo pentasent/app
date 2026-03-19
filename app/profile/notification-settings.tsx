@@ -16,6 +16,7 @@ import {
 } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth, supabase } from '../../contexts/AuthContext';
+import { getImageUrl } from '@/utils/get-image-url';
 import { CustomImage as Image } from '../../components/CustomImage';
 import { UserNotificationSetting } from '../../types';
 import { NotificationSettingsShimmer } from '../../components/shimmers/NotificationSettingsShimmer';
@@ -149,7 +150,7 @@ export default function NotificationSettingsScreen() {
                         style={styles.profileImageContainer}
                     >
                         <Image
-                            source={{ uri: user?.avatar_url || 'https://via.placeholder.com/50' }}
+                            source={{ uri: getImageUrl(user?.avatar_url) }}
                             style={styles.headerAvatar}
                         />
                     </TouchableOpacity>

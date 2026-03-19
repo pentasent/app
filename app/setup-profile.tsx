@@ -22,8 +22,9 @@ import { CustomImage as Image } from '../components/CustomImage';
 import { Camera, ChevronDown, Check, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { decode } from 'base64-arraybuffer';
+import { uploadImage } from '../utils/image-upload';
 import { COUNTRIES } from '@/lib/country';
+import { getImageUrl } from '@/utils/get-image-url';
 
 // const COUNTRIES = [
 //     { label: 'United States', flag: '🇺🇸' },
@@ -96,22 +97,16 @@ export default function SetupProfileScreen() {
             let finalAvatarUrl = avatarUrl;
 
             // Upload Image if it's a local URI
-            if (avatarUrl && !avatarUrl.startsWith('http')) {
-                const filename = `${user.id}_${Date.now()}.jpg`;
-                const path = `avatars/${filename}`;
-
-                const base64 = await FileSystem.readAsStringAsync(avatarUrl, { encoding: 'base64' });
-
-                const { error: uploadError } = await supabase.storage
-                    .from('avatars')
-                    .upload(path, decode(base64), { contentType: 'image/jpeg' });
-
-                if (uploadError) {
-                    throw new Error('Failed to upload avatar. Ensure "avatars" bucket allows uploads.');
+            if (avatarUrl && (avatarUrl.startsWith('file') || avatarUrl.startsWith('content'))) {
+                const filename = `avatars/${user.id}_${Date.now()}.jpg`;
+                const uploadResult = await uploadImage(avatarUrl, filename);
+                
+                if (!uploadResult) {
+                    throw new Error('Failed to upload avatar.');
                 }
 
-                const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
-                finalAvatarUrl = publicUrlData.publicUrl;
+                // Store only the relative path
+                finalAvatarUrl = filename;
             }
 
             // Upsert into public.users
@@ -183,7 +178,7 @@ export default function SetupProfileScreen() {
                             <View style={styles.avatarSection}>
                                 <TouchableOpacity onPress={pickImage} style={styles.avatarWrapper}>
                                     <Image
-                                        source={{ uri: avatarUrl || 'https://via.placeholder.com/150' }}
+                                        source={{ uri: getImageUrl(avatarUrl) }}
                                         style={styles.avatar}
                                     />
                                     <View style={styles.cameraIcon}>
