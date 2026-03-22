@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { User } from '../types/database';
@@ -22,6 +23,12 @@ interface AuthContextType {
     avatar_uri?: string;
     is_onboarded?: boolean;
   }) => Promise<void>;
+  unverifiedEmail: string | null;
+  setUnverifiedEmail: (email: string | null) => void;
+  otpType: 'signup' | 'recovery';
+  setOtpType: (type: 'signup' | 'recovery') => void;
+  isResetVerified: boolean;
+  setIsResetVerified: (verified: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,6 +37,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [otpType, setOtpType] = useState<'signup' | 'recovery'>('signup');
+  const [isResetVerified, setIsResetVerified] = useState(false);
 
   useEffect(() => {
     // 1. Initial Load
@@ -52,7 +62,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // };
 const initializeAuth = async () => {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session }, error } = await supabase.auth.getSession();
+
+    if (error) {
+      // If refresh token is missing or invalid, it means session is truly dead
+      if (error.message.includes('Refresh Token Not Found') || error.message.includes('refresh_token_not_found') || error.message.includes('Invalid Refresh Token')) {
+        await supabase.auth.signOut().catch(console.error);
+        Alert.alert("Session Expired", "Your session has expired. Please log in again.");
+      } else {
+        console.warn("Session retrieval error:", error.message);
+      }
+      setLoading(false);
+      return;
+    }
 
     if (!session?.user) {
       await supabase.auth.signOut().catch(console.error);
@@ -113,7 +135,8 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
         .eq('id', userId)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') throw error;
+
       if (publicUser) {
         const userData: User = {
           id: publicUser.id,
@@ -136,23 +159,48 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
         setUser(userData);
         setIsAdmin(userData.role === 'admin' || email === 'hello@pentasent.com');
       } else {
-        // User authenticated in auth.users but not yet migrated/synced to public.users
-        // A trigger should handle this, but as a fallback/draft state:
-        const draftUser: User = {
-          id: userId,
-          email: email,
-          name: email.split('@')[0],
-          role: 'user',
-          followers_count: 0,
-          following_count: 0,
-          profile_views_count: 0,
-          posts_count: 0,
-          is_verified: false,
-          is_active: true,
-          is_onboarded: false,
-          created_at: new Date().toISOString()
-        };
-        setUser(draftUser);
+        // Explicitly create the user in public.users if they are verified in auth.users
+        const defaultName = email.split('@')[0];
+        const { data: maybeInserted, error: insertError } = await supabase
+          .from('users')
+          .insert([
+            {
+              id: userId,
+              email: email,
+              name: defaultName,
+              is_verified: false, // Set false initially so _layout redirects to setup-profile
+              is_onboarded: false,
+              role: 'user',
+              followers_count: 0,
+              following_count: 0,
+              profile_views_count: 0,
+              posts_count: 0,
+            }
+          ])
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error("Failed to insert into public.users:", insertError);
+          // Fallback to draft user if insert fails
+          const draftUser: User = {
+            id: userId,
+            email: email,
+            name: defaultName,
+            role: 'user',
+            followers_count: 0,
+            following_count: 0,
+            profile_views_count: 0,
+            posts_count: 0,
+            is_verified: false,
+            is_active: true,
+            is_onboarded: false,
+            created_at: new Date().toISOString()
+          };
+          setUser(draftUser);
+        } else if (maybeInserted) {
+          setUser(maybeInserted as User);
+        }
         setIsAdmin(email === 'hello@pentasent.com');
       }
     } catch (e) {
@@ -164,6 +212,21 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
 
   const register = async (email: string, password: string, metadata?: any) => {
     try {
+      // Pre-flight check: Is the user in public.users?
+      const { data: existingPublicUser } = await supabase
+        .from('users')
+        .select('id, is_verified')
+        .ilike('email', email)
+        .maybeSingle();
+
+      if (existingPublicUser) {
+        throw new Error("Account already exists. Please login instead.");
+      }
+
+      // Pre-flight check: Is the user in auth.users but NOT in public.users?
+      // Delete-and-Recreate strategy to ensure latest password and trigger OTP.
+      await supabase.rpc('delete_unconfirmed_user', { target_email: email });
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -180,6 +243,11 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
 
       // If email confirmation is off, the user is signed in immediately 
       // and onAuthStateChange will catch it.
+      
+      // We expect confirmation to be ON, so auth state won't change yet.
+      // We set unverified email so the Verify OTP component can pick it up.
+      setUnverifiedEmail(email);
+      setOtpType('signup');
 
     } catch (error: any) {
       throw new Error(error.message || 'Registration failed');
@@ -188,16 +256,43 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
 
   const login = async (email: string, password: string) => {
     try {
+      // Pre-check existence in public.users
+      const { data: publicUser } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('email', email)
+        .maybeSingle();
+
+      if (!publicUser) {
+        throw new Error("Account not found. Please sign up.");
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
-      if (error) throw error;
+
+      if (error) {
+        // Auto-resend OTP if email is not confirmed
+        if (error.message.includes('Email not confirmed')) {
+           const { error: resendError } = await supabase.auth.resend({
+             type: 'signup',
+             email: email,
+           });
+           const modifiedError = new Error(error.message) as any;
+           if (resendError) {
+             modifiedError.resendFailed = true;
+             modifiedError.resendMessage = resendError.message;
+           }
+           throw modifiedError;
+        }
+        throw error;
+      }
 
       // onAuthStateChange handles the rest
 
     } catch (error: any) {
-      throw new Error(error.message || 'Login failed');
+      throw error; // Re-throw the original error to be caught by the component
     }
   };
 
@@ -210,11 +305,19 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
     }
   };
 
+  // const refreshUser = async () => {
+  //   if (user) {
+  //     await fetchAndSetUserData(user.id, user.email || '');
+  //   }
+  // };
+
   const refreshUser = async () => {
-    if (user) {
-      await fetchAndSetUserData(user.id, user.email || '');
-    }
-  };
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+
+  if (authUser) {
+    await fetchAndSetUserData(authUser.id, authUser.email || '');
+  }
+};
 
   const resetPassword = async (email: string) => {
     try {
@@ -301,6 +404,12 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
         refreshUser,
         resetPassword,
         updateProfile,
+        unverifiedEmail,
+        setUnverifiedEmail,
+        otpType,
+        setOtpType,
+        isResetVerified,
+        setIsResetVerified,
       }}
     >
       {children}

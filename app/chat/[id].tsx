@@ -67,7 +67,7 @@ const renderTextWithLinks = (text: string, style: any, isMe: boolean, router: an
             <Text
               key={index}
               style={[style, {
-                color: isMe ? colors.primaryDark : colors.primary, // 👈 changed
+                color: isMe ? '#fff1f6' : colors.primary, // 👈 changed
                 textDecorationLine: 'underline',
               }]}
               onPress={handlePress}
@@ -397,6 +397,12 @@ export default function ChatDetailScreen() {
         if (prev.some(m => m.id === data.id)) {
           return prev;
         }
+
+        // Update read status for incoming messages from others
+        if (!isMyMessage) {
+            updateLastRead();
+        }
+        
         return [...prev, data];
       });
 
@@ -915,6 +921,7 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
     padding: 12,
     borderRadius: 16,
+    minWidth: '30%'
   },
   myBubble: {
     // backgroundColor is animated inline
@@ -1040,7 +1047,7 @@ const styles = StyleSheet.create({
   replyUser: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: colors.accentDark,
+    color: '#ffe8d6',
     marginBottom: 2,
   },
   replyText: {

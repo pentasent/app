@@ -30,6 +30,8 @@ export const colors = {
   disabledText: '#B8B8B8',
 
   shadow: 'rgba(232, 180, 184, 0.15)',
+
+  websiteSubtitle: '#6b4c5c'
 };
 
 export const spacing = {

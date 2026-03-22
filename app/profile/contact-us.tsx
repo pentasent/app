@@ -35,7 +35,7 @@ export default function ContactUsScreen() {
             linkedin: 'https://www.linkedin.com/company/pentasent',
             youtube: 'https://www.youtube.com/@pentasent',
             twitter: 'https://twitter.com/pentasent',
-            instagram: 'https://www.instagram.com/pentasent',
+            instagram: 'https://www.instagram.com/pentasentinc',
             pinterest: 'https://www.pinterest.com/pentasent',
             privacy: "https://www.pentasent.com/privacy-policy",
             terms: "https://www.pentasent.com/terms-and-conditions",
@@ -56,7 +56,7 @@ export default function ContactUsScreen() {
                         <Text style={styles.title}>Contact Us</Text>
                         <Text style={styles.subtitle}>Reach out to us for support and info</Text>
                     </View>
-                    <TouchableOpacity
+                    {/* <TouchableOpacity
                         onPress={() => router.back()}
                         style={styles.profileImageContainer}
                     >
@@ -64,6 +64,10 @@ export default function ContactUsScreen() {
                             source={{ uri: getImageUrl(user?.avatar_url) }}
                             style={styles.headerAvatar}
                         />
+                    </TouchableOpacity> */}
+                    <TouchableOpacity style={styles.iconBoxLarge}
+                        onPress={() => router.back()}>
+                        <Mail size={24} color={colors.primary} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -279,4 +283,16 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: colors.text,
     },
+        iconBoxLarge: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        backgroundColor: colors.background,
+        justifyContent: 'center',
+        alignItems: 'center',
+
+    }
 });

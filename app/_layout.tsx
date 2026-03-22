@@ -16,7 +16,7 @@ import { identifyUser } from '../lib/analytics/identify';
 import { trackEvent } from '../lib/analytics/track';
 
 function RootLayoutNav() {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading, isResetVerified } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -78,13 +78,25 @@ function RootLayoutNav() {
 
     const inAuthGroup = segments[0] === '(tabs)' || segments[0] === 'coming-soon';
     const inProtectedRoute = ['chat', 'routine', 'notifications', 'post', 'profile', 'beats', 'community', 'meditation', 'journal', 'tasks', 'yoga', 'products'].includes(segments[0]);
+    const isAuthRoute = ['login', 'register', 'verify-otp', 'reset-password'].includes(segments[0]);
 
-    if (!user) {
-      if (inAuthGroup || inProtectedRoute || segments[0] === 'setup-profile' || segments[0] === 'onboarding-communities') {
-        router.replace('/login');
-      }
-    } else {
+if (!user) {
+  // BLOCK redirects during entire reset flow
+  if (segments[0] === 'reset-password') {
+    return;
+  }
+
+  if (inAuthGroup || inProtectedRoute || segments[0] === 'setup-profile' || segments[0] === 'onboarding-communities') {
+    router.replace('/login');
+  }
+} else {
       // User is logged in. Check verification (Draft User status).
+      
+      // If they are in the middle of a reset password flow, let them be.
+      if (segments[0] === 'reset-password' && isResetVerified) {
+         return; 
+      }
+      
       if (!user.is_verified) {
         if (segments[0] !== 'setup-profile') {
           router.replace('/setup-profile');
@@ -95,7 +107,7 @@ function RootLayoutNav() {
         }
       } else {
         // User is completely onboarded.
-        if (!inAuthGroup && !inProtectedRoute && segments[0] !== 'onboarding-communities' && segments[0] !== 'setup-profile') {
+        if (!inAuthGroup && !inProtectedRoute && segments[0] !== 'onboarding-communities' && segments[0] !== 'setup-profile' && segments[0] !== 'reset-password') {
           router.replace('/(tabs)');
 
           // Process pending deep link after landing on feed
@@ -128,6 +140,8 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="login" />
       <Stack.Screen name="register" />
+      <Stack.Screen name="reset-password" />
+      <Stack.Screen name="verify-otp" />
       <Stack.Screen name="setup-profile" />
       <Stack.Screen name="onboarding-communities" />
       <Stack.Screen name="coming-soon" />

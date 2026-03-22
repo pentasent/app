@@ -33,36 +33,13 @@ export default function LoginScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // Forgot Password States
-  const [showForgotModal, setShowForgotModal] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotLoading, setForgotLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-
-  const { login, resetPassword } = useAuth();
+  const { login } = useAuth();
   const router = useRouter();
 
   const isValidEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   };
 
-  // Cooldown timer logic
-  useEffect(() => {
-    let interval: any;
-    if (cooldown > 0) {
-      interval = setInterval(() => {
-        setCooldown((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [cooldown]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  };
 
   const handleLogin = async () => {
     setErrorMsg(null);
@@ -85,31 +62,12 @@ export default function LoginScreen() {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!isValidEmail(forgotEmail)) return;
-    
-    if (cooldown > 0) {
-      setErrorMsg(`Please wait ${formatTime(cooldown)} before resending.`);
-      return;
-    }
-
-    setForgotLoading(true);
-    try {
-      await resetPassword(forgotEmail.toLowerCase().trim());
-      setEmailSent(true);
-      setCooldown(120); // 2 minutes cooldown
-    } catch (error: any) {
-      setErrorMsg(error.message || 'Failed to send reset link');
-    } finally {
-      setForgotLoading(false);
-    }
-  };
 
   return (
     <>
       <Toast message={errorMsg} onHide={() => setErrorMsg(null)} />
       <LinearGradient
-        colors={[colors.primaryLight, colors.background, colors.accent]}
+        colors={[colors.primaryLight, colors.background, colors.accent + "50"]}
         style={styles.gradient}
       >
         <KeyboardShiftView style={styles.container}>
@@ -160,16 +118,17 @@ export default function LoginScreen() {
               />
 
               <TouchableOpacity 
-                onPress={() => setShowForgotModal(true)}
+                onPress={() => router.push('/reset-password' as any)}
                 style={styles.forgotPasswordLink}
               >
                 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
               </TouchableOpacity>
 
               <Button
-                title="Login"
+                title="Sign In"
                 onPress={handleLogin}
                 loading={loading}
+                variant="web-primary"
                 style={styles.loginButton}
               />
 
@@ -190,106 +149,7 @@ export default function LoginScreen() {
               Take Back Control of Your Mind and Senses
             </Text>
 
-                  {/* Forgot Password Modal */}
-      <Modal
-        visible={showForgotModal}
-        transparent
-        statusBarTranslucent
-        animationType="fade"
-        onRequestClose={() => setShowForgotModal(false)}
-      >
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
-          <TouchableOpacity 
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => Keyboard.dismiss()}
-          >
-            <View style={styles.modalContainer}>
-              <ScrollView 
-                contentContainerStyle={styles.modalScrollContent}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
-                <View style={styles.modalContent}>
 
-                  {emailSent ? (
-                    <View style={styles.successContainer}>
-                      <CheckCircle2 size={60} color={colors.success} strokeWidth={1.5} />
-                      <Text style={styles.modalTitle}>Check your email</Text>
-                      <Text style={styles.modalDescription}>
-                        If an account exists with {forgotEmail}, you will receive a password reset link shortly.
-                      </Text>
-                      
-                      <View style={styles.tipCard}>
-                        <Text style={styles.tipText}>
-                          💡 Didn't receive an email? Check your spam folder, or make sure the email address is correct.
-                        </Text>
-                      </View>
-
-                      <Button
-                        title={cooldown > 0 ? `Resend in ${formatTime(cooldown)}` : "Resend Link"}
-                        onPress={handleForgotPassword}
-                        loading={forgotLoading}
-                        disabled={cooldown > 0}
-                        variant="outline"
-                        style={styles.modalButton}
-                      />
-                      
-                      <Button
-                        title="Back to Login"
-                        onPress={() => {
-                          setShowForgotModal(false);
-                          setEmailSent(false);
-                        }}
-                        style={styles.modalButton}
-                      />
-                    </View>
-                  ) : (
-                    <>
-                      <Text style={styles.modalTitle}>Reset Password</Text>
-                      <Text style={styles.modalDescription}>
-                        Enter your email address and we'll send you a link to reset your password.
-                      </Text>
-
-                      <Input
-                        label="Email Address"
-                        placeholder="example@email.com"
-                        value={forgotEmail}
-                        onChangeText={setForgotEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        leftAccessory={<Mail size={20} color={colors.textMuted} style={{marginRight: 10}} />}
-                      />
-
-                      <Button
-                        title={cooldown > 0 ? `Resend in ${formatTime(cooldown)}` : "Send Reset Link"}
-                        onPress={handleForgotPassword}
-                        loading={forgotLoading}
-                        disabled={!isValidEmail(forgotEmail) || cooldown > 0}
-                        style={styles.modalButton}
-                      />
-
-                      <Button
-                        title="Cancel"
-                        variant="ghost"
-                        onPress={() => {
-                          setShowForgotModal(false);
-                          setEmailSent(false);
-                        }}
-                        style={[styles.modalButton, { marginTop: spacing.sm }]}
-                      />
-                    </>
-                  )}
-                </View>
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </Modal>
           </ScrollView>
         </KeyboardShiftView>
       </LinearGradient>
@@ -311,53 +171,53 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   header: {
-    alignItems: 'center',
-    marginBottom: spacing.xxl,
+    // alignItems: 'center',
+    marginBottom: spacing.xl,
   },
   logoContainer: {
-    marginBottom: spacing.lg,
-    padding: spacing.lg,
-    backgroundColor: colors.surface,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: borderRadius.full,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 4,
+    width:75,
+    height:75,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logo: {
-    width: 55,
-    height: 55,
+    width: 42,
+    height: 42,
   },
   title: {
     ...typography.h1,
-    color: colors.primary,
+    color: '#3c2a34', // Web heading color
     marginBottom: spacing.xs,
-    fontWeight: '700',
+    fontWeight: '300', // Lighter weight for premium feel
   },
   subtitle: {
-    ...typography.bodySmall,
-    color: colors.textLight,
+    ...typography.body,
+    color: '#6b4c5c',
     textAlign: 'center',
   },
   formContainer: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 4,
+    // backgroundColor: 'rgba(255, 255, 255, 0.9)', // Slight transparency
+    // borderRadius: 24, // More rounded like web
+    // padding: spacing.xl,
+    paddingTop: spacing.sm,
+    // shadowColor: '#3c2a34',
+    // shadowOffset: { width: 0, height: 8 },
+    // shadowOpacity: 0.05,
+    // shadowRadius: 24,
+    // elevation: 4,
   },
   forgotPasswordLink: {
     alignSelf: 'flex-end',
-    marginBottom: spacing.md,
-    marginTop: -spacing.xs,
+    marginBottom: spacing.lg,
+    marginTop: -spacing.sm,
   },
   forgotPasswordText: {
     ...typography.bodySmall,
-    color: colors.primary,
+    color: '#6b4c5c', // Web forgot password color
     fontWeight: '500',
   },
   loginButton: {

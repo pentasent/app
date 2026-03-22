@@ -5,7 +5,7 @@ import { colors, spacing, borderRadius, typography, shadows } from '../constants
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'web-primary';
   loading?: boolean;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -21,13 +21,14 @@ export const Button: React.FC<ButtonProps> = ({
   style,
   textStyle,
 }) => {
-  const isDisabled = disabled || loading;
+  const isDisabled = disabled;
 
   return (
     <TouchableOpacity
       style={[
         styles.button,
         variant === 'primary' && styles.primaryButton,
+        variant === 'web-primary' && styles.webPrimaryButton,
         variant === 'secondary' && styles.secondaryButton,
         variant === 'outline' && styles.outlineButton,
         variant === 'ghost' && styles.ghostButton,
@@ -39,12 +40,19 @@ export const Button: React.FC<ButtonProps> = ({
       activeOpacity={0.7}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'outline' ? colors.primary : colors.primary} />
+        <ActivityIndicator
+          color={
+            variant === 'primary' || variant === 'web-primary'
+              ? '#ffffff'
+              : colors.primary
+          }
+        />
       ) : (
         <Text
           style={[
             styles.buttonText,
             variant === 'primary' && styles.primaryButtonText,
+            variant === 'web-primary' && styles.webPrimaryButtonText,
             variant === 'secondary' && styles.secondaryButtonText,
             variant === 'outline' && styles.outlineButtonText,
             variant === 'ghost' && styles.ghostButtonText,
@@ -61,16 +69,20 @@ export const Button: React.FC<ButtonProps> = ({
 
 const styles = StyleSheet.create({
   button: {
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,   // was md
     paddingHorizontal: spacing.lg,
     borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 50,
+    minHeight: 50,                 // was 50
     ...shadows.small,
   },
   primaryButton: {
     backgroundColor: colors.primary,
+  },
+  webPrimaryButton: {
+    backgroundColor: '#3d2f4d',
+    // borderRadius: 12,
   },
   secondaryButton: {
     backgroundColor: colors.secondary,
@@ -84,6 +96,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     elevation: 0,
     shadowOpacity: 0,
+    minHeight: 0,
+    paddingVertical: 4,
+    paddingHorizontal: 0,
   },
   disabledButton: {
     backgroundColor: colors.borderLight,
@@ -96,6 +111,10 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: colors.surface,
   },
+  webPrimaryButtonText: {
+    color: colors.surface,
+    fontWeight: '500',
+  },
   secondaryButtonText: {
     color: colors.surface,
   },
@@ -103,7 +122,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   ghostButtonText: {
-    color: colors.textLight,
+    color: colors.websiteSubtitle,
   },
   disabledButtonText: {
     color: colors.disabledText,

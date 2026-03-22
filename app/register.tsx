@@ -8,7 +8,8 @@ import {
   Alert,
   Animated,
   TouchableOpacity,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -39,6 +40,49 @@ export default function RegisterScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [referralCode, setReferralCode] = useState('P-APP');
+  const [timer, setTimer] = useState(0);
+
+  const TIMER_KEY = "signup_timer_end";
+
+  // Persistent timer initialization
+  useEffect(() => {
+    const initTimer = async () => {
+      const storedTimerEnd = await AsyncStorage.getItem(TIMER_KEY);
+      if (storedTimerEnd) {
+        const endTime = parseInt(storedTimerEnd, 10);
+        const remaining = Math.ceil((endTime - Date.now()) / 1000);
+        if (remaining > 0) {
+          setTimer(remaining);
+        } else {
+          await AsyncStorage.removeItem(TIMER_KEY);
+        }
+      }
+    };
+    initTimer();
+  }, []);
+
+  // Timer interval
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => {
+          if (prev <= 1) {
+            AsyncStorage.removeItem(TIMER_KEY);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
 
   useEffect(() => {
     const initializeReferral = async () => {
@@ -82,6 +126,11 @@ export default function RegisterScreen() {
       };
       await register(email.toLowerCase().trim(), password, metadata);
 
+      // Start the persistent timer after successful registration
+      const endTime = Date.now() + 120 * 1000;
+      await AsyncStorage.setItem(TIMER_KEY, endTime.toString());
+      setTimer(120);
+
       // Successfully registered, track event
       trackEvent('user_signup');
 
@@ -99,7 +148,7 @@ export default function RegisterScreen() {
     <>
       <Toast message={errorMsg} onHide={() => setErrorMsg(null)} />
       <LinearGradient
-        colors={[colors.primaryLight, colors.background, colors.accent]}
+        colors={[colors.primaryLight, colors.background, colors.accent + "50"]}
         style={styles.gradient}
       >
         <KeyboardShiftView style={styles.container}>
@@ -108,15 +157,14 @@ export default function RegisterScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
+            <View style={styles.logoContainer}>
+              <AnimatedImage
+                source={require('@/assets/images/logo/logo_light.svg')}
+                style={styles.logo}
+                contentFit="contain"
+              />
+            </View>
             <View style={styles.header}>
-              {/* <View style={styles.logoContainer}>
-                <AnimatedImage
-                  source={require('@/assets/images/logo/logo_light.svg')}
-                  style={styles.logo}
-                  contentFit="contain"
-                // tintColor="#FFFFFF"
-                />
-              </View> */}
               <Text style={styles.title}>Create Account</Text>
               <Text style={styles.subtitle}>Join Pentasent for better health</Text>
             </View>
@@ -169,9 +217,11 @@ export default function RegisterScreen() {
               />
 
               <Button
-                title="Create Account"
+                title={timer > 0 ? `Resend in ${formatTime(timer)}` : "Create Account"}
                 onPress={handleRegister}
                 loading={loading}
+                disabled={timer > 0}
+                variant="web-primary"
                 style={styles.registerButton}
               />
 
@@ -188,8 +238,24 @@ export default function RegisterScreen() {
               />
             </View>
 
-            <Text style={styles.footer}>
+            {/* <Text style={styles.footer}>
               By creating an account, you agree to our Terms & Privacy Policy
+            </Text> */}
+            <Text style={styles.footer}>
+              By creating an account, you agree to our{" "}
+              <Text
+                style={{ color: '#8b5e83' }}
+                onPress={() => Linking.openURL('https://pentasent.com/terms-and-conditions')}
+              >
+                Terms
+              </Text>{" "}
+              &{" "}
+              <Text
+                style={{ color: '#8b5e83' }}
+                onPress={() => Linking.openURL('https://pentasent.com/privacy-policy')}
+              >
+                Privacy
+              </Text>
             </Text>
           </ScrollView>
         </KeyboardShiftView>
@@ -212,44 +278,44 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   header: {
-    alignItems: 'center',
+    // alignItems: 'center',
     marginBottom: spacing.xl,
   },
   logoContainer: {
-    marginBottom: spacing.lg,
-    padding: spacing.lg,
-    backgroundColor: colors.surface,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: borderRadius.full,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 4,
+    width: 75,
+    height: 75,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logo: {
-    width: 55,
-    height: 55,
+    width: 42,
+    height: 42,
   },
   title: {
     ...typography.h1,
-    color: colors.primary,
+    color: '#3c2a34', // Web heading color
     marginBottom: spacing.xs,
-    fontWeight: '700',
+    fontWeight: '300', // Lighter weight for premium feel
   },
   subtitle: {
-    ...typography.bodySmall,
-    color: colors.textLight,
-    textAlign: 'center',
+    ...typography.body,
+    color: '#6b4c5c',
+    // textAlign: 'center',
   },
   formContainer: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 4,
+    // backgroundColor: 'rgba(255, 255, 255, 0.9)', // Slight transparency
+    // borderRadius: 24, // More rounded like web
+    // padding: spacing.xl,
+    paddingTop: spacing.sm,
+    // shadowColor: '#3c2a34',
+    // shadowOffset: { width: 0, height: 8 },
+    // shadowOpacity: 0.05,
+    // shadowRadius: 24,
+    // elevation: 4,
   },
   registerButton: {
     marginTop: spacing.sm,

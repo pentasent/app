@@ -5,15 +5,31 @@ import { colors, spacing, borderRadius, typography } from '../constants/theme';
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
+  required?: boolean; 
   leftAccessory?: React.ReactNode;
   rightAccessory?: React.ReactNode;
   containerStyle?: object;
 }
 
-export const Input: React.FC<InputProps> = ({ label, error, leftAccessory, rightAccessory, style, containerStyle, ...props }) => {
+export const Input: React.FC<InputProps> = ({
+  label,
+  required,
+  error,
+  leftAccessory,
+  rightAccessory,
+  style,
+  containerStyle,
+  ...props
+}) => {
   return (
     <View style={[styles.container, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {/* {label && <Text style={styles.label}>{label}</Text>} */}
+      {label && (
+        <Text style={styles.label}>
+          {label}
+          {required && <Text style={{ color: colors.error }}> *</Text>}
+        </Text>
+      )}
       <View style={[styles.inputContainer, error && styles.inputError]}>
         {leftAccessory && <View style={styles.leftAccessory}>{leftAccessory}</View>}
         <TextInput
@@ -46,6 +62,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.md,
+    minHeight: 56, 
   },
   inputElement: {
     flex: 1,

@@ -63,10 +63,7 @@ export const EditPostDialog = ({ visible, onClose, onSubmit, initialTitle, initi
     };
 
     const handleSubmit = async () => {
-        if (title.trim().length < 10) {
-            setToastMsg('Title must be at least 10 characters long.');
-            return;
-        }
+
         if (content.trim().length < 20) {
             setToastMsg('Description must be at least 20 characters long.');
             return;

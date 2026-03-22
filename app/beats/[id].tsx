@@ -1,5 +1,5 @@
 import { CustomImage as Image } from '@/components/CustomImage';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ImageBackground, TouchableOpacity, Dimensions, ActivityIndicator, SafeAreaView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
@@ -12,6 +12,59 @@ import { supabase } from '../../contexts/AuthContext';
 import { Beat } from '../../types';
 import { BeatDetailShimmer } from '../../components/shimmers/BeatDetailShimmer';
 import { getImageUrl } from '@/utils/get-image-url';
+import { Animated, Easing } from 'react-native';
+
+const PlayingAnimation = () => {
+    const bars = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
+
+    useEffect(() => {
+        const createAnim = (val: Animated.Value, delay: number) => {
+            return Animated.loop(
+                Animated.sequence([
+                    Animated.timing(val, {
+                        toValue: 1,
+                        duration: 400,
+                        delay,
+                        easing: Easing.linear,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(val, {
+                        toValue: 0,
+                        duration: 400,
+                        easing: Easing.linear,
+                        useNativeDriver: true,
+                    }),
+                ])
+            );
+        };
+
+        const animations = bars.map((bar, i) => createAnim(bar, i * 150));
+        animations.forEach(anim => anim.start());
+
+        return () => animations.forEach(anim => anim.stop());
+    }, []);
+
+    return (
+        <View style={styles.playingAnimationContainer}>
+            {bars.map((bar, i) => (
+                <Animated.View
+                    key={i}
+                    style={[
+                        styles.playingBar,
+                        {
+                            transform: [{
+                                scaleY: bar.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0.4, 1],
+                                })
+                            }]
+                        }
+                    ]}
+                />
+            ))}
+        </View>
+    );
+};
 
 const { width } = Dimensions.get('window');
 
@@ -22,17 +75,30 @@ export default function BeatsPlayerScreen() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const audioSource = React.useMemo(() => {
+        if (!beat?.audio_url) return null;
+        return {
+            uri: getImageUrl(beat.audio_url),
+        };
+    }, [beat?.audio_url]);
+
     // Audio Player
-    const player = useAudioPlayer(getImageUrl(beat?.audio_url) || null);
+    const player = useAudioPlayer(audioSource);
     const status = useAudioPlayerStatus(player);
 
     // Status (expo-audio status object)
-    const isPlaying = status.playing;
-    const isLooping = status.loop;
-    const isLoaded = status.isLoaded;
-    const isBuffering = status.isBuffering;
-    const duration = status.duration; // seconds
-    const position = status.currentTime; // seconds
+    const isPlaying = status?.playing ?? false;
+    const isLooping = status?.loop ?? false;
+    const isLoaded = status?.isLoaded ?? false;
+    const isBuffering = status?.isBuffering ?? false;
+    const duration = status?.duration ?? 0; // seconds
+    const position = status?.currentTime ?? 0; // seconds
+
+    useEffect(() => {
+        if (player) {
+            player.loop = isLooping;
+        }
+    }, [player, isLooping]);
 
     useEffect(() => {
         fetchBeatDetails();
@@ -112,7 +178,7 @@ export default function BeatsPlayerScreen() {
                 blurRadius={20} // Optional blur for background feel
             >
                 <LinearGradient
-                    colors={['rgba(0,0,0,0.3)', colors.background]} // Gradient from transparent to solid theme color
+                    colors={['rgba(0,0,0,0.3)', colors.primary + "90"]} // Gradient from transparent to solid theme color
                     style={styles.gradient}
                     start={{ x: 0.5, y: 0 }}
                     end={{ x: 0.5, y: 1 }}
@@ -120,11 +186,14 @@ export default function BeatsPlayerScreen() {
 
                 <SafeAreaView style={styles.content}>
                     {/* Header */}
-                    <BlurView intensity={40} tint="light" style={styles.header}>
+                    <BlurView intensity={10} tint="light" style={styles.header}>
                         <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
-                            <ChevronDown size={28} color={colors.text} />
+                            <ChevronDown size={28} color={colors.surface} />
                         </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Now Playing</Text>
+                        <View style={styles.headerTitleContainer}>
+                            <Text style={styles.headerTitle}>Now Playing</Text>
+                            {isPlaying && <PlayingAnimation />}
+                        </View>
                         <View style={{ width: 44 }} />
                     </BlurView>
 
@@ -144,9 +213,9 @@ export default function BeatsPlayerScreen() {
                                 {beat.beat_tags?.name || 'Unknown Genre'}
                             </Text>
                         </View>
-                        <TouchableOpacity style={styles.iconButton}>
+                        {/* <TouchableOpacity style={styles.iconButton}>
                             <Heart size={24} color={colors.text} />
-                        </TouchableOpacity>
+                        </TouchableOpacity> */}
                     </View>
 
                     {/* Progress Bar */}
@@ -157,9 +226,9 @@ export default function BeatsPlayerScreen() {
                             maximumValue={duration}
                             value={position}
                             onSlidingComplete={handleSeek}
-                            minimumTrackTintColor={colors.primary}
-                            maximumTrackTintColor={colors.border}
-                            thumbTintColor={colors.primary}
+                            minimumTrackTintColor={colors.websiteSubtitle}
+                            maximumTrackTintColor={colors.surface}
+                            thumbTintColor={colors.websiteSubtitle}
                         />
                         <View style={styles.timeRow}>
                             <Text style={styles.timeText}>{formatTime(position)}</Text>
@@ -170,7 +239,7 @@ export default function BeatsPlayerScreen() {
                     {/* Controls */}
                     <View style={styles.controls}>
                         <TouchableOpacity onPress={toggleLoop} style={styles.controlButtonSmall}>
-                            <Repeat size={20} color={isLooping ? colors.primary : colors.textMuted} />
+                            <Repeat size={20} color={isLooping ? colors.websiteSubtitle : colors.surface + "95"} />
                         </TouchableOpacity>
 
                         <TouchableOpacity onPress={skipBackward} style={styles.controlButtonMedium}>
@@ -180,14 +249,17 @@ export default function BeatsPlayerScreen() {
                         <TouchableOpacity
                             onPress={togglePlayPause}
                             style={styles.playPauseButton}
-                            disabled={!isLoaded || isBuffering}
+                            disabled={!isLoaded}
                         >
-                            {!isLoaded || isBuffering ? (
-                                <ActivityIndicator size="small" color={colors.background} />
-                            ) : isPlaying ? (
+                            {isPlaying ? (
                                 <Pause size={32} color={colors.background} fill={colors.background} />
                             ) : (
                                 <Play size={32} color={colors.background} fill={colors.background} style={{ marginLeft: 4 }} />
+                            )}
+                            {isBuffering && (
+                                <View style={styles.bufferingOverlay}>
+                                    <ActivityIndicator size="small" color={colors.background} />
+                                </View>
                             )}
                         </TouchableOpacity>
 
@@ -196,7 +268,7 @@ export default function BeatsPlayerScreen() {
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.controlButtonSmall}>
-                            <Info size={20} color={colors.textMuted} />
+                            <Info size={20} color={colors.surface + "0"} />
                         </TouchableOpacity>
                     </View>
                 </SafeAreaView>
@@ -264,7 +336,7 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: colors.text,
+        color: colors.surface,
         letterSpacing: 1,
     },
     iconButton: {
@@ -296,13 +368,13 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 24,
         fontWeight: '700',
-        color: colors.text,
+        color: colors.surface,
         marginBottom: 4,
         maxWidth: 250,
     },
     artist: {
         fontSize: 16,
-        color: colors.textMuted,
+        color: colors.surface + "80",
         fontWeight: '500',
     },
     progressContainer: {
@@ -319,7 +391,7 @@ const styles = StyleSheet.create({
     },
     timeText: {
         fontSize: 12,
-        color: colors.textMuted,
+        color: colors.surface + "80",
         fontVariant: ['tabular-nums'],
     },
     controls: {
@@ -338,13 +410,37 @@ const styles = StyleSheet.create({
         width: 70,
         height: 70,
         borderRadius: 35,
-        backgroundColor: colors.primary,
+        backgroundColor: colors.websiteSubtitle,
         justifyContent: 'center',
         alignItems: 'center',
         elevation: 5,
-        shadowColor: colors.primary,
+        shadowColor: colors.websiteSubtitle,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
+    },
+    headerTitleContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    playingAnimationContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        height: 14,
+        gap: 2,
+    },
+    playingBar: {
+        width: 3,
+        height: '100%',
+        backgroundColor: colors.websiteSubtitle,
+        borderRadius: 1,
+    },
+    bufferingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.2)',
+        borderRadius: 35,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

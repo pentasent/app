@@ -1,5 +1,6 @@
 import React from 'react';
 import { CustomImage as Image } from '@/components/CustomImage';
+import { FlexibleCustomImage } from '@/components/FlexibleCustomImage';
 import { View, Text, TouchableOpacity, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { Heart, MessageCircle, Share2, MoreHorizontal, Eye, BarChart2, BarChart, BarChart3, BarChart4 } from 'lucide-react-native';
 import { colors, spacing } from '../../constants/theme';
@@ -72,7 +73,7 @@ export const PostCard = ({ post, onPress, onLike, onComment, onShare, onMore }: 
                                     {post.is_uploading 
                                         ? 'Just now' 
                                         : new Date(post.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                </Text>
+                                </Text> 
                             </View>
                         </View>
                     </View>
@@ -87,7 +88,7 @@ export const PostCard = ({ post, onPress, onLike, onComment, onShare, onMore }: 
                 {/* Media */}
                 {(post.images && post.images.length > 0) || (post.is_uploading && post.local_image_urls && post.local_image_urls.length > 0) ? (
                     <View style={styles.mediaWrapper}>
-                        <Image
+                        <FlexibleCustomImage
                             source={{ uri: getImageUrl(post.images?.[0]?.image_url || post.local_image_urls?.[0]) }}
                             style={styles.postImage}
                             resizeMode="cover"
@@ -224,9 +225,7 @@ const styles = StyleSheet.create({
     },
     postImage: {
         width: '100%',
-        height: 250,
         marginTop: 4,
-        // borderRadius: 12,
     },
     divider: {
         height: 1,
@@ -280,7 +279,6 @@ const styles = StyleSheet.create({
     mediaWrapper: {
         position: 'relative',
         width: '100%',
-        height: 250,
         marginTop: 4,
         overflow: 'hidden',
     },

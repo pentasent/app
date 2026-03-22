@@ -1,5 +1,6 @@
 import { Toast } from '@/components/Toast';
 import { CustomImage as Image } from '@/components/CustomImage';
+import { FlexibleCustomImage } from '@/components/FlexibleCustomImage';
 import {
   View,
   Text,
@@ -16,7 +17,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase, useAuth } from '../../contexts/AuthContext';
 import { Post, Comment } from '../../types/database';
 import { borderRadius, colors, spacing } from '../../constants/theme';
@@ -98,6 +99,15 @@ export default function PostDetailScreen() {
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const [imageRatios, setImageRatios] = useState<{ [key: string]: number }>({});
+  const hasIncrementedView = useRef(false);
+
+  const handleSizeFound = (id: string, ratio: number) => {
+    setImageRatios((prev) => {
+      if (prev[id] === ratio) return prev;
+      return { ...prev, [id]: ratio };
+    });
+  };
 
   // Derived current post (favor global context for real-time updates)
   const contextPost = posts.find(
@@ -120,11 +130,11 @@ export default function PostDetailScreen() {
       const imagesChanged =
         (contextPost.images?.length || 0) !== (post?.images?.length || 0);
 
-      if (isUploadingChanged || imagesChanged || !post) {
+      if (isUploadingChanged || imagesChanged || !post || contextPost.views_count !== post.views_count) {
         setPost(contextPost);
       }
     }
-  }, [contextPost?.is_uploading, contextPost?.images?.length, postId]);
+  }, [contextPost?.is_uploading, contextPost?.images?.length, contextPost?.views_count, postId]);
 
   useEffect(() => {
     // Only fetch if we don't have a post OR if we have a post but it's not currently uploading
@@ -152,6 +162,14 @@ export default function PostDetailScreen() {
     );
     if (!cached) {
       setLoading(true);
+    } else if (!hasIncrementedView.current) {
+        // If we found it in cache, we should still ensure it's incremented locally
+        // at least once if not already done by index.tsx (though index.tsx does it).
+        // But more importantly, we want to make sure our local state has the right count.
+        hasIncrementedView.current = true;
+        // Don't call viewPost here because index.tsx already calls it before navigating.
+        // But we must ensure local state 'post' is initialized with that cached data.
+        if (!post) setPost(cached);
     }
 
     try {
@@ -185,7 +203,14 @@ export default function PostDetailScreen() {
         userHasLikedPost = !!likeData;
       }
 
-      setPost({ ...postData, user_has_liked: userHasLikedPost } as any);
+      setPost(prev => {
+        const newData = { ...postData, user_has_liked: userHasLikedPost };
+        // Prevent view count flickering by keeping the higher (likely optimistic) count
+        if (prev && (prev.views_count || 0) > (newData.views_count || 0)) {
+          newData.views_count = prev.views_count;
+        }
+        return newData as any;
+      });
       setEditTitle(postData.title || '');
       setEditContent(parseContent(postData.content));
 
@@ -1013,8 +1038,14 @@ export default function PostDetailScreen() {
                       {currentPost.community.name} •{' '}
                     </Text>
                   )}
-                  <Text style={styles.time}>
+                  {/* <Text style={styles.time}>
                     {new Date(currentPost.created_at).toLocaleDateString()}
+                    {currentPost.is_edited && ' • Edited'}
+                  </Text> */}
+                  <Text style={styles.time}>
+                    {currentPost.is_uploading
+                      ? 'Just now'
+                      : new Date(currentPost.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                     {currentPost.is_edited && ' • Edited'}
                   </Text>
                 </View>
@@ -1053,6 +1084,19 @@ export default function PostDetailScreen() {
 
               const isSingle = displayImages.length === 1;
 
+              const targetHeight = (() => {
+                if (isSingle) return undefined;
+                let maxH = 250;
+                displayImages.forEach((img: any) => {
+                  const r = imageRatios[img.id];
+                  if (r) {
+                    const h = 300 / r;
+                    if (h > maxH) maxH = h;
+                  }
+                });
+                return Math.min(maxH, 500);
+              })();
+
               return (
                 <ScrollView
                   horizontal={!isSingle}
@@ -1064,14 +1108,16 @@ export default function PostDetailScreen() {
                       key={img.id || `img-${idx}`}
                       onPress={() => setFullScreenImage(img.image_url)}
                     >
-                      <Image
+                      <FlexibleCustomImage
                         source={{ uri: getImageUrl(img.image_url) }}
-                        style={
+                        onSizeFound={(r) => handleSizeFound(img.id, r)}
+                        style={[
                           isSingle
                             ? styles.singleImage
-                            : styles.currentPostImage
-                        }
-                        resizeMode="cover"
+                            : { ...styles.currentPostImage, height: targetHeight },
+                          { backgroundColor: colors.borderLight },
+                        ]}
+                        resizeMode={isSingle ? 'cover' : 'contain'}
                       />
                     </TouchableOpacity>
                   ))}
@@ -1330,13 +1376,12 @@ const styles = StyleSheet.create({
   },
   currentPostImage: {
     width: 300,
-    height: 200,
+    height: 300,
     borderRadius: 12,
     marginRight: 12,
   },
   singleImage: {
     width: '100%',
-    height: 200,
     borderRadius: 12,
   },
   engagement: {

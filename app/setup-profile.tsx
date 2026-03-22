@@ -21,28 +21,25 @@ import { StatusBar } from 'expo-status-bar';
 import { CustomImage as Image } from '../components/CustomImage';
 import { Camera, ChevronDown, Check, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import KeyboardShiftView from '@/components/KeyboardShiftView';
 import { uploadImage } from '../utils/image-upload';
 import { COUNTRIES } from '@/lib/country';
 import { getImageUrl } from '@/utils/get-image-url';
+// import { useEffect } from 'react';
+// import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// const COUNTRIES = [
-//     { label: 'United States', flag: '🇺🇸' },
-//     { label: 'United Kingdom', flag: '🇬🇧' },
-//     { label: 'India', flag: '🇮🇳' },
-//     { label: 'Canada', flag: '🇨🇦' },
-//     { label: 'Australia', flag: '🇦🇺' },
-//     { label: 'Germany', flag: '🇩🇪' },
-//     { label: 'France', flag: '🇫🇷' },
-//     { label: 'Japan', flag: '🇯🇵' },
-//     { label: 'Brazil', flag: '🇧🇷' },
-//     { label: 'South Africa', flag: '🇿🇦' },
-// ];
 
 export default function SetupProfileScreen() {
     const { user, refreshUser } = useAuth();
     const router = useRouter();
+//      useEffect(() => {
+//     const clearStorage = async () => {
+//       await AsyncStorage.clear();
+//       console.log('AsyncStorage cleared');
+//     };
 
+//     clearStorage();
+//   }, []);
     const capitalizeWords = (text: string) =>
         text
             ? text
@@ -52,7 +49,7 @@ export default function SetupProfileScreen() {
                 .join(' ')
             : '';
 
-    const [name, setName] = useState(capitalizeWords(user?.name || ''));
+    const [name, setName] = useState(capitalizeWords(''));
     const [bio, setBio] = useState('');
     const [country, setCountry] = useState<{ label: string; flag: string } | null>(null);
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -64,7 +61,7 @@ export default function SetupProfileScreen() {
     const pickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
+            // allowsEditing: true,
             aspect: [1, 1],
             quality: 0.8,
         });
@@ -100,7 +97,7 @@ export default function SetupProfileScreen() {
             if (avatarUrl && (avatarUrl.startsWith('file') || avatarUrl.startsWith('content'))) {
                 const filename = `avatars/${user.id}_${Date.now()}.jpg`;
                 const uploadResult = await uploadImage(avatarUrl, filename);
-                
+
                 if (!uploadResult) {
                     throw new Error('Failed to upload avatar.');
                 }
@@ -161,10 +158,7 @@ export default function SetupProfileScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" backgroundColor={colors.background} />
                 <Toast message={errorMsg} onHide={() => setErrorMsg(null)} />
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={styles.keyboardContainer}
-                >
+                <KeyboardShiftView style={styles.keyboardContainer}>
                     <ScrollView
                         contentContainerStyle={styles.scrollContent}
                         showsVerticalScrollIndicator={false}
@@ -173,23 +167,31 @@ export default function SetupProfileScreen() {
                         <View style={styles.header}>
                             <Text style={styles.title}>Complete Profile</Text>
                             <Text style={styles.subtitle}>Tell us a bit about yourself</Text>
+                            <Text style={{ color: colors.textMuted, marginTop: 5 }}>
+                                Fields marked with <Text style={{ color: colors.error }}>*</Text> are required
+                            </Text>
                         </View>
 
                         <View style={styles.formContainer}>
                             <View style={styles.avatarSection}>
                                 <TouchableOpacity onPress={pickImage} style={styles.avatarWrapper}>
                                     <Image
-                                        source={{ uri: getImageUrl(avatarUrl) }}
+                                        source={{ uri: avatarUrl ? getImageUrl(avatarUrl) : "" }}
+                                        // source={{ uri: avatarUrl ? getImageUrl(avatarUrl) : "https://api.dicebear.com/7.x/avataaars/png?seed=Felix" }}
                                         style={styles.avatar}
                                     />
                                     <View style={styles.cameraIcon}>
                                         <Camera size={20} color="#FFF" />
                                     </View>
                                 </TouchableOpacity>
+                                <Text style={{ color: colors.textMuted, marginVertical: avatarUrl ? 0 : 12 }}>
+                                    {avatarUrl ? '' : 'Upload Image'} <Text style={{ color: colors.error }}>{avatarUrl ? '' : '*'}</Text>
+                                </Text>
                             </View>
 
                             <Input
                                 label="Email Address"
+                                required
                                 value={user?.email || ''}
                                 editable={false}
                                 style={styles.disabledInput}
@@ -197,6 +199,7 @@ export default function SetupProfileScreen() {
 
                             <Input
                                 label="Full Name"
+                                required
                                 placeholder="Enter your name"
                                 value={name}
                                 onChangeText={setName}
@@ -204,7 +207,10 @@ export default function SetupProfileScreen() {
                             />
 
                             <View style={styles.inputContainer}>
-                                <Text style={styles.label}>Location (Country)</Text>
+                                {/* <Text style={styles.label}>Location (Country)</Text> */}
+                                <Text style={styles.label}>
+                                    Location (Country) <Text style={{ color: colors.error }}>*</Text>
+                                </Text>
                                 <TouchableOpacity
                                     style={styles.countryPicker}
                                     onPress={() => setShowCountryModal(true)}
@@ -218,7 +224,7 @@ export default function SetupProfileScreen() {
                             </View>
 
                             <View style={[styles.inputContainer]}>
-                                <Text style={styles.label}>Bio</Text>
+                                <Text style={styles.label}>Bio <Text style={{ color: colors.error }}>*</Text> {bio.length < 20 && <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: 'normal' }}>(min 20 chars)</Text>}</Text>
                                 <Input
                                     placeholder="Share a little about yourself..."
                                     value={bio}
@@ -241,7 +247,7 @@ export default function SetupProfileScreen() {
                             />
                         </View>
                     </ScrollView>
-                </KeyboardAvoidingView>
+                </KeyboardShiftView>
             </SafeAreaView>
 
             {/* Country Selection Modal */}

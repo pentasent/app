@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Image as RNImage, View, Text, StyleSheet, TouchableOpacity, Dimensions, FlatList, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAudioPlayer } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, withSequence, cancelAnimation } from 'react-native-reanimated';
-import { ArrowLeft, Play, Pause, Volume2, VolumeX, Clock } from 'lucide-react-native';
+import { ArrowLeft, Play, Pause, Volume2, VolumeX, Clock, Music } from 'lucide-react-native';
 import { colors, spacing } from '../../constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -112,17 +112,30 @@ export default function MeditationScreen() {
     };
 
     // --- Audio Logic (expo-audio) ---
-    const player = useAudioPlayer(selectedSound?.uri || null);
+    const audioSource = React.useMemo(() => {
+        if (!selectedSound?.uri) return null;
+        return {
+            uri: selectedSound.uri,
+        };
+    }, [selectedSound?.uri]);
+
+    const player = useAudioPlayer(audioSource);
+    const status = useAudioPlayerStatus(player);
+
+    const isBuffering = status?.isBuffering ?? false;
 
     useEffect(() => {
-        if (player && selectedSound) {
+        if (player) {
             player.loop = true;
             player.volume = isMuted ? 0 : 1.0;
-            player.muted = isMuted; // Try explicit muted property if available
-            if (isPlaying) player.play();
-            else player.pause();
+            player.muted = isMuted;
+            if (isPlaying) {
+                player.play();
+            } else {
+                player.pause();
+            }
         }
-    }, [player, selectedSound, isPlaying, isMuted]);
+    }, [player, isPlaying, isMuted]);
 
     // --- Timer Logic (Unified) ---
     useEffect(() => {
@@ -300,6 +313,11 @@ export default function MeditationScreen() {
                             ) : (
                                 <Play size={32} color="black" fill="black" style={{ marginLeft: 4 }} />
                             )}
+                            {isBuffering && (
+                                <View style={styles.bufferingOverlay}>
+                                    <ActivityIndicator size="small" color="black" />
+                                </View>
+                            )}
                         </TouchableOpacity>
 
                         <View style={{ width: 24 }} />
@@ -310,8 +328,9 @@ export default function MeditationScreen() {
                         {isLoading ? (
                             <View style={{ flexDirection: 'row', paddingHorizontal: spacing.lg }}>
                                 {[1, 2, 3, 4].map((key) => (
-                                    <View key={key} style={[styles.soundCard, { backgroundColor: 'transparent' }]}>
+                                    <View key={key} style={[styles.soundCard, { backgroundColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center' }]}>
                                         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.1)' }]} />
+                                        <Music size={24} color="rgba(255,255,255,0.2)" />
                                     </View>
                                 ))}
                             </View>
@@ -625,5 +644,12 @@ const styles = StyleSheet.create({
         height: 8,
         borderRadius: 4,
         backgroundColor: colors.primary,
-    }
+    },
+    bufferingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255,255,255,0.4)',
+        borderRadius: 35,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
 });

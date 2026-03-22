@@ -72,10 +72,7 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
             setToastMsg('Please select a channel to post in.');
             return;
         }
-        if (title.trim().length < 10) {
-            setToastMsg('Title must be at least 10 characters long.');
-            return;
-        }
+
         if (content.trim().length < 20) {
             setToastMsg('Description must be at least 20 characters long.');
             return;
@@ -259,7 +256,7 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
                                 <View style={styles.titleRow}>
                                     <TextInput
                                         style={styles.titleInput}
-                                        placeholder="Title"
+                                        placeholder="Title (Optional)"
                                         placeholderTextColor={colors.textMuted}
                                         value={title}
                                         onChangeText={(t) => setTitle(t.slice(0, MAX_TITLE_LENGTH))}

@@ -145,7 +145,7 @@ export default function NotificationSettingsScreen() {
                         <Text style={styles.title}>Notifications</Text>
                         <Text style={styles.subtitle}>Manage your notification preferences</Text>
                     </View>
-                    <TouchableOpacity
+                    {/* <TouchableOpacity
                         onPress={() => router.back()}
                         style={styles.profileImageContainer}
                     >
@@ -153,6 +153,10 @@ export default function NotificationSettingsScreen() {
                             source={{ uri: getImageUrl(user?.avatar_url) }}
                             style={styles.headerAvatar}
                         />
+                    </TouchableOpacity> */}
+                    <TouchableOpacity style={styles.iconBoxLarge}
+                        onPress={() => router.back()}>
+                        <Bell size={24} color={colors.primary} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -398,4 +402,16 @@ const styles = StyleSheet.create({
         position: 'absolute',
         right: -20,
     },
+        iconBoxLarge: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+        backgroundColor: colors.background,
+        justifyContent: 'center',
+        alignItems: 'center',
+
+    }
 });

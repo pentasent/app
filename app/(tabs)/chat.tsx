@@ -10,7 +10,7 @@ import {
     RefreshControl,
     SafeAreaView
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
 import { MessageSquare, Users, ChevronRight } from 'lucide-react-native';
@@ -45,10 +45,10 @@ export default function ChatListScreen() {
         chatsRef.current = chats;
     }, [chats]);
 
-    const fetchChats = useCallback(async () => {
+    const fetchChats = useCallback(async (silent = false) => {
         if (!user) return;
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             // 1. Get chats user is a member of
             const { data: memberData, error: memberError } = await supabase
                 .from('community_chat_members')
@@ -154,6 +154,14 @@ export default function ChatListScreen() {
         if (!user || !user.is_onboarded) return;
         fetchChats();
     }, [fetchChats, user]);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (user && user.is_onboarded) {
+                fetchChats(true);
+            }
+        }, [fetchChats, user])
+    );
 
     // Real-time subscription for main chat list
     useEffect(() => {

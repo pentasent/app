@@ -34,10 +34,31 @@
             {
               "scheme": "https",
               "host": "pentasent.com"
+            },
+            {
+              "scheme": "https",
+              "host": "www.pentasent.com"
+            },
+            {
+              "scheme": "http",
+              "host": "pentasent.com"
+            },
+            {
+              "scheme": "http",
+              "host": "www.pentasent.com"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
         }
+      ]
+    },
+
+    "ios": {
+      "bundleIdentifier": "com.pentasent.app",
+      "supportsTablet": true,
+      "associatedDomains": [
+        "applinks:pentasent.com",
+        "applinks:www.pentasent.com"
       ]
     },
 

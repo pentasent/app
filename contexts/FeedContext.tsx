@@ -512,7 +512,14 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     user_has_liked = !!likeData;
                 }
 
-                updatePost(postId, { ...data, user_has_liked } as any);
+                // MERGE STRATEGY: Don't let stale views_count overwrite newer local count
+                const existingPost = posts.find(p => p.id === postId);
+                const mergedData = { ...data, user_has_liked };
+                if (existingPost && (existingPost.views_count || 0) > (mergedData.views_count || 0)) {
+                    mergedData.views_count = existingPost.views_count;
+                }
+
+                updatePost(postId, mergedData as any);
             }
         } catch (error) {
             console.error('Error refreshing single post:', error);

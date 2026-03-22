@@ -25,6 +25,7 @@ import {
   Lock,
   Baby,
   Bell,
+  MessageSquare,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, supabase } from '../../contexts/AuthContext';
@@ -204,7 +205,9 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{localUser?.email}</Text>
+                <Text style={styles.infoValue}
+                numberOfLines={1}
+                ellipsizeMode="tail">{localUser?.email}</Text>
               </View>
             </View>
 
@@ -299,6 +302,17 @@ export default function ProfileScreen() {
             <View style={styles.linkLeft}>
               <Bell size={18} color={colors.secondary} />
               <Text style={styles.linkText}>Notification Settings</Text>
+            </View>
+            <ChevronRight size={18} color={colors.textLight} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.sectionContainer, styles.contactUsTrigger]}
+            onPress={() => router.push('/profile/feedback')}
+          >
+            <View style={styles.linkLeft}>
+              <MessageSquare size={18} color={colors.primary} />
+              <Text style={styles.linkText}>Feedback</Text>
             </View>
             <ChevronRight size={18} color={colors.textLight} />
           </TouchableOpacity>
