@@ -168,6 +168,7 @@ export default function SetupProfileScreen() {
                     <ScrollView
                         contentContainerStyle={styles.scrollContent}
                         showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
                     >
                         <View style={styles.header}>
                             <Text style={styles.title}>Complete Profile</Text>

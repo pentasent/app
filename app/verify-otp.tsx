@@ -115,6 +115,7 @@ export default function VerifyOtpScreen() {
                     <ScrollView
                         contentContainerStyle={styles.scrollContent}
                         showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
                     >
                         <View style={styles.header}>
                             <View style={styles.logoContainer}>

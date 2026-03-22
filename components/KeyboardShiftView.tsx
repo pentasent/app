@@ -46,8 +46,7 @@ export default function KeyboardShiftView({ children, style }: Props) {
       style={[
         style,
         {
-          transform: [{ translateY: Animated.multiply(keyboardHeight, -1) }],
-          paddingBottom: Math.max(0, insets.bottom), // Ensure content is pushed above bottom safe area
+          paddingBottom: Animated.add(keyboardHeight, Math.max(0, insets.bottom)),
         },
       ]}
     >

@@ -116,15 +116,16 @@ export default function LoginScreen() {
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.header}>
-              {/* <View style={styles.logoContainer}>
+              <View style={styles.logoContainer}>
                 <AnimatedImage
                   source={require('@/assets/images/logo/logo_light.svg')}
                   style={styles.logo}
                   contentFit="contain"
                 />
-              </View> */}
+              </View>
               <Text style={styles.title}>Pentasent</Text>
               <Text style={styles.subtitle}>Take Back Control of Your Mind and Senses</Text>
             </View>
@@ -213,15 +214,6 @@ export default function LoginScreen() {
                 keyboardShouldPersistTaps="handled"
               >
                 <View style={styles.modalContent}>
-                  <TouchableOpacity 
-                    style={styles.closeButton}
-                    onPress={() => {
-                      setShowForgotModal(false);
-                      setEmailSent(false);
-                    }}
-                  >
-                    <X size={24} color={colors.textMuted} />
-                  </TouchableOpacity>
 
                   {emailSent ? (
                     <View style={styles.successContainer}>
@@ -279,6 +271,16 @@ export default function LoginScreen() {
                         loading={forgotLoading}
                         disabled={!isValidEmail(forgotEmail) || cooldown > 0}
                         style={styles.modalButton}
+                      />
+
+                      <Button
+                        title="Cancel"
+                        variant="ghost"
+                        onPress={() => {
+                          setShowForgotModal(false);
+                          setEmailSent(false);
+                        }}
+                        style={[styles.modalButton, { marginTop: spacing.sm }]}
                       />
                     </>
                   )}
