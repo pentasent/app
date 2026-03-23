@@ -33,19 +33,33 @@
           "data": [
             {
               "scheme": "https",
-              "host": "pentasent.com"
+              "host": "pentasent.com",
+              "pathPrefix": "/"
             },
             {
               "scheme": "https",
-              "host": "www.pentasent.com"
+              "host": "www.pentasent.com",
+              "pathPrefix": "/"
             },
             {
-              "scheme": "http",
-              "host": "pentasent.com"
+              "scheme": "https",
+              "host": "pentasent.com",
+              "pathPrefix": "/post"
             },
             {
-              "scheme": "http",
-              "host": "www.pentasent.com"
+              "scheme": "https",
+              "host": "pentasent.com",
+              "pathPrefix": "/chat"
+            },
+            {
+              "scheme": "https",
+              "host": "pentasent.com",
+              "pathPrefix": "/meditation"
+            },
+            {
+              "scheme": "https",
+              "host": "pentasent.com",
+              "pathPrefix": "/beats"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]

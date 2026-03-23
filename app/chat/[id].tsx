@@ -1,4 +1,5 @@
 import { CustomImage as Image } from '@/components/CustomImage';
+import { Toast } from '@/components/Toast';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -53,10 +54,17 @@ const renderTextWithLinks = (text: string, style: any, isMe: boolean, router: an
       {parts.map((part, index) => {
         if (part.match(urlRegex)) {
           const handlePress = () => {
-            if (part.includes('pentasent.com/post/') || part.includes('pentasent.com/post/')) {
+            if (part.includes('pentasent.com/post/')) {
               const postId = part.split('/post/')[1]?.split(/[?#]/)[0];
               if (postId) {
                 router.push(`/post/${postId}`);
+                return;
+              }
+            }
+            if (part.includes('pentasent.com/articles/')) {
+              const slug = part.split('/articles/')[1]?.split(/[?#]/)[0];
+              if (slug) {
+                router.push(`/articles/${slug}`);
                 return;
               }
             }
@@ -101,6 +109,9 @@ export default function ChatDetailScreen() {
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<MessageWithUser | null>(null);
 
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+
   // Highlighting State
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const blinkAnim = useRef(new Animated.Value(0)).current;
@@ -113,27 +124,6 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     handleRealtimeUpdateRef.current = handleRealtimeUpdate;
   });
-
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSub = Keyboard.addListener(showEvent, (event: any) => {
-      setKeyboardHeight(event.endCoordinates.height);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    });
-
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
 
   useEffect(() => {
     if (!chatId) return;
@@ -446,39 +436,28 @@ export default function ChatDetailScreen() {
     }
 
     const tempId = `temp-${Date.now()}`;
-    const optimisticMessage: MessageWithUser = {
-      id: tempId as any,
-      chat_id: chatId,
-      user_id: user.id,
-      message_text: textToSend,
-      parent_message_id: parentId,
-      parent_message_text: parentText, // Store text directly
-      parent_message: parentMsg as any,
-      is_edited: false,
-      is_deleted: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      user: user as User,
-      tempId: tempId,
-      isSending: true
-    };
-
-    // UI Update
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setMessages(prev => [...prev, optimisticMessage]);
-    setInputText('');
-    setReplyingTo(null);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
     try {
       if (editingMessage) {
-        setMessages(prev => prev.map(m => m.id === editingMessage.id ? { ...m, message_text: inputText, is_edited: true } : m));
+        // Prevent editing a message that hasn't been saved to DB yet (temp ID)
+        if (typeof editingMessage.id === 'string' && editingMessage.id.startsWith('temp-')) {
+          setToastType('info');
+          setToastMsg('Message is in queue, please try again in a second.');
+          return;
+        }
+
+        // 1. Optimistic Update Real Message in local state
+        setMessages(prev => prev.map(m => m.id === editingMessage.id ? { ...m, message_text: textToSend, is_edited: true } : m));
+        
+        // 2. Clear states
+        setInputText('');
         setEditingMessage(null);
 
+        // 3. DB Update
         const { error } = await supabase
           .from('community_chat_messages')
           .update({
-            message_text: inputText,
+            message_text: textToSend,
             is_edited: true,
             updated_at: new Date().toISOString()
           })
@@ -486,8 +465,33 @@ export default function ChatDetailScreen() {
 
         if (error) throw error;
       } else {
-        // Ensure parent_message_id is explicitly passed as null if undefined
-        const { error } = await supabase
+        // --- NEW MESSAGE FLOW ---
+        const optimisticMessage: MessageWithUser = {
+          id: tempId as any,
+          chat_id: chatId,
+          user_id: user.id,
+          message_text: textToSend,
+          parent_message_id: parentId,
+          parent_message_text: parentText,
+          parent_message: parentMsg as any,
+          is_edited: false,
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          user: user as User,
+          tempId: tempId,
+          isSending: true
+        };
+
+        // 1. Optimistic Add to UI
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setMessages(prev => [...prev, optimisticMessage]);
+        setInputText('');
+        setReplyingTo(null);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+
+        // 2. DB Insert
+        const { data: savedData, error } = await supabase
           .from('community_chat_messages')
           .insert({
             chat_id: chatId,
@@ -495,16 +499,31 @@ export default function ChatDetailScreen() {
             message_text: textToSend,
             parent_message_id: parentId || null,
             parent_message_text: parentText || null
-          });
+          })
+          .select()
+          .single();
 
         if (error) {
           setMessages(prev => prev.filter(m => m.tempId !== tempId));
           throw error;
         }
+
+        // --- IMMEDIATE UI SYNC (Fixes tempId sticking) ---
+        if (savedData) {
+            setMessages(prev => prev.map(m => m.tempId === tempId ? {
+                ...m,
+                ...savedData,
+                user: m.user, // Keep local user data
+                parent_message: m.parent_message, // Keep local parent message info
+                tempId: undefined, // Clear temp ID
+                isSending: false // Clear sending state
+            } : m));
+        }
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message');
+      console.error('Error sending/updating message:', error);
+      setToastType('error');
+      setToastMsg('Failed to process message');
     }
   };
 
@@ -545,6 +564,12 @@ export default function ChatDetailScreen() {
   };
 
   const startEdit = (message: MessageWithUser) => {
+    // Prevent editing a message that hasn't been saved to DB yet (temp ID)
+    if (typeof message.id === 'string' && message.id.startsWith('temp-')) {
+      setToastType('info');
+      setToastMsg('Message is in queue, please try again in a second.');
+      return;
+    }
     setEditingMessage(message);
     setInputText(message.message_text);
     setReplyingTo(null);
@@ -557,6 +582,13 @@ export default function ChatDetailScreen() {
   };
 
   const deleteMessage = async (messageId: string) => {
+    // Prevent deleting a message that hasn't been saved to DB yet (temp ID)
+    if (typeof messageId === 'string' && messageId.startsWith('temp-')) {
+        setToastType('info');
+        setToastMsg('Message is in queue, please try again in a second.');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('community_chat_messages')
@@ -692,6 +724,12 @@ export default function ChatDetailScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.container}>
+      <StatusBar style="dark" backgroundColor="transparent" translucent />
+      <Toast
+        message={toastMsg}
+        onHide={() => setToastMsg(null)}
+        type={toastType}
+      />
 
       {/* Header */}
       <View style={styles.header}>
@@ -722,81 +760,75 @@ export default function ChatDetailScreen() {
         </TouchableOpacity> */}
       </View>
 
-      {/* Messages */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item, index) => item.id ?? item.tempId ?? `msg-${index}`}
-
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 20 }
-          ]}
-          style={{ flex: 1 }}
-
-          initialNumToRender={20}
-          maxToRenderPerBatch={20}
-          windowSize={10}
-          removeClippedSubviews={true}
-          updateCellsBatchingPeriod={50}
-
-          maintainVisibleContentPosition={{
-            minIndexForVisible: 0
-          }}
-
-          keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        />
-      )}
-
-      {/* Input Area */}
-      <KeyboardShiftView>
-        {/* Context Bar (Replying/Editing) */}
-        {(replyingTo || editingMessage) && (
-          <View style={styles.contextBar}>
-            <View style={styles.contextContent}>
-              {editingMessage ? (
-                <>
-                  <Edit2 size={16} color={colors.primary} />
-                  <Text style={styles.contextText}>Editing message</Text>
-                </>
-              ) : (
-                <>
-                  <Reply size={16} color={colors.primary} />
-                  <Text style={styles.contextText}>Replying to {replyingTo?.user?.name || 'User'}</Text>
-                </>
-              )}
-            </View>
-            <TouchableOpacity onPress={cancelAction}>
-              <X size={20} color={colors.textMuted} />
-            </TouchableOpacity>
+      {/* Messages & Input wrapped in one KeyboardShiftView for unified behavior */}
+      <KeyboardShiftView style={{ flex: 1 }}>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item, index) => item.id ?? item.tempId ?? `msg-${index}`}
+            contentContainerStyle={styles.listContent}
+            style={{ flex: 1 }}
+            initialNumToRender={20}
+            maxToRenderPerBatch={20}
+            windowSize={10}
+            removeClippedSubviews={true}
+            updateCellsBatchingPeriod={50}
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0
+            }}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          />
         )}
 
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Type a message..."
-            placeholderTextColor={colors.textMuted}
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-          />
-          <TouchableOpacity
-            style={!inputText ? styles.sendButtonDisabled : styles.sendButton}
-            onPress={handleSend}
-            disabled={!inputText}
-          >
-            {/* Always show Send icon, no loader */}
-            <Send size={20} color={!inputText ? colors.textMuted : '#FFF'} />
-          </TouchableOpacity>
+        {/* Input Area */}
+        <View>
+          {/* Context Bar (Replying/Editing) */}
+          {(replyingTo || editingMessage) && (
+            <View style={styles.contextBar}>
+              <View style={styles.contextContent}>
+                {editingMessage ? (
+                  <>
+                    <Edit2 size={16} color={colors.primary} />
+                    <Text style={styles.contextText}>Editing message</Text>
+                  </>
+                ) : (
+                  <>
+                    <Reply size={16} color={colors.primary} />
+                    <Text style={styles.contextText}>Replying to {replyingTo?.user?.name || 'User'}</Text>
+                  </>
+                )}
+              </View>
+              <TouchableOpacity onPress={cancelAction}>
+                <X size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Type a message..."
+              placeholderTextColor={colors.textMuted}
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+            />
+            <TouchableOpacity
+              style={!inputText ? styles.sendButtonDisabled : styles.sendButton}
+              onPress={handleSend}
+              disabled={!inputText}
+            >
+              <Send size={20} color={!inputText ? colors.textMuted : '#FFF'} />
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardShiftView>
 
@@ -897,7 +929,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.md,
-    paddingBottom: spacing.lg,
   },
   messageRow: {
     flexDirection: 'row',
@@ -992,6 +1023,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? 0 : spacing.md, // Handle safe area padding through KeyboardShiftView
     backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,

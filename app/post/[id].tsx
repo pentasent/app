@@ -233,6 +233,21 @@ export default function PostDetailScreen() {
 
       if (commentsError) throw commentsError;
 
+      // Real total comment count for sync
+      const { count: realCount, error: countError } = await supabase
+          .from('comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('post_id', postId);
+
+      if (!countError && realCount !== null && postData) {
+          // If mismatch detected, sync it silently
+          if (realCount !== postData.comments_count) {
+              await supabase.from('posts').update({ comments_count: realCount }).eq('id', postId);
+              postData.comments_count = realCount;
+              updatePost(postId, { comments_count: realCount });
+          }
+      }
+
       let formattedComments = (commentsData as any[]).map((c) => ({
         ...c,
         replies: c.replies || [],
@@ -615,6 +630,8 @@ export default function PostDetailScreen() {
                 }
               : null,
           );
+          // Sync with Global Feed
+          updatePost(realPostId, { comments_count: Math.max(0, currentPost.comments_count - 1) });
         }
 
         setShowDeleteModal(false);

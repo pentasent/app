@@ -321,3 +321,127 @@ export interface Meditation {
     play_count: number;
     created_at: string;
 }
+export interface BeatTag {
+    id: string;
+    name: string;
+    description?: string;
+    icon_url?: string;
+    music_count: number;
+    is_active: boolean;
+    created_at: string;
+}
+
+export interface Beat {
+    id: string;
+    title: string;
+    short_description?: string;
+    tag_id: string;
+    audio_url: string;
+    banner_url?: string;
+    duration_seconds?: number;
+    play_count: number;
+    like_count: number;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+    beat_tags?: BeatTag; // For joined queries
+}
+
+export interface Article {
+    id: string;
+    author_id: string;
+    title: string;
+    slug: string;
+    description: string;
+    banner_image: string;
+    status: 'draft' | 'published';
+    reading_time: number;
+    view_count: number;
+    like_count: number;
+    comment_count: number;
+    created_at: string;
+    updated_at: string;
+    published_at: string | null;
+    canonical_url?: string | null;
+
+    // Joins
+    author?: User;
+    blocks?: ArticleBlock[];
+    seo?: ArticleSEO;
+    tags?: ArticleTag[];
+    user_has_liked?: boolean;
+}
+
+export interface ArticleBlock {
+    id: string;
+    article_id: string;
+    position: number;
+    type: 'heading' | 'paragraph' | 'image' | 'bullet_list' | 'numbered_list' | 'quote' | 'highlight' | 'video' | 'divider';
+    content: any; // jsonb
+    created_at: string;
+}
+
+export interface ArticleSEO {
+    id: string;
+    article_id: string;
+    meta_title?: string | null;
+    meta_description?: string | null;
+    og_title?: string | null;
+    og_description?: string | null;
+    og_image?: string | null;
+    twitter_title?: string | null;
+    twitter_description?: string | null;
+    twitter_image?: string | null;
+    keywords?: string[] | null;
+    structured_data?: any | null;
+}
+
+export interface ArticleLike {
+    id: string;
+    article_id: string;
+    user_id: string;
+    created_at: string;
+}
+
+export interface ArticleView {
+    id: string;
+    article_id: string;
+    user_id?: string | null;
+    ip_hash: string;
+    viewed_at: string;
+}
+
+export interface ArticleComment {
+    id: string;
+    article_id: string;
+    user_id: string;
+    parent_id?: string | null;
+    content: string;
+    like_count: number;
+    created_at: string;
+    updated_at: string;
+
+    // Joins
+    user?: User;
+    replies?: ArticleComment[];
+    user_has_liked?: boolean;
+    reply_count?: number;
+}
+
+export interface ArticleCommentLike {
+    id: string;
+    comment_id: string;
+    user_id: string;
+    created_at: string;
+}
+
+export interface ArticleTag {
+    id: string;
+    name: string;
+    slug: string;
+}
+
+export interface ArticleTagMap {
+    article_id: string;
+    tag_id: string;
+}

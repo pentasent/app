@@ -77,7 +77,7 @@ function RootLayoutNav() {
     if (loading) return;
 
     const inAuthGroup = segments[0] === '(tabs)' || segments[0] === 'coming-soon';
-    const inProtectedRoute = ['chat', 'routine', 'notifications', 'post', 'profile', 'beats', 'community', 'meditation', 'journal', 'tasks', 'yoga', 'products'].includes(segments[0]);
+    const inProtectedRoute = ['chat', 'routine', 'notifications', 'post', 'profile', 'beats', 'community', 'meditation', 'journal', 'articles', 'tasks', 'yoga', 'products'].includes(segments[0]);
     const isAuthRoute = ['login', 'register', 'verify-otp', 'reset-password'].includes(segments[0]);
 
 if (!user) {
@@ -163,6 +163,8 @@ if (!user) {
       <Stack.Screen name="yoga/index" options={{ headerShown: false }} />
       <Stack.Screen name="yoga/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="products/index" options={{ headerShown: false }} />
+      <Stack.Screen name="articles/index" options={{ headerShown: false }} />
+      <Stack.Screen name="articles/[slug]" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
