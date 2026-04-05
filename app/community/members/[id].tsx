@@ -9,6 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { CommunityMemberShimmer } from '@/components/shimmers/CommunityMemberShimmer';
 import { getImageUrl } from '@/utils/get-image-url';
+import { Toast } from '@/components/Toast';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 type Member = {
     id: string; // Follower ID (not user ID directly in this context if we want to delete relation)
@@ -36,6 +38,11 @@ export default function CommunityMembersScreen() {
     // For 'Add Member' mode
     const [allUsers, setAllUsers] = useState<any[]>([]);
     const [adding, setAdding] = useState<Set<string>>(new Set());
+    const [toastMsg, setToastMsg] = useState<string | null>(null);
+    const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+    const [showRemoveModal, setShowRemoveModal] = useState(false);
+    const [memberToRemove, setMemberToRemove] = useState<{ id: string, name: string } | null>(null);
+    const [isRemoving, setIsRemoving] = useState(false);
 
     const isAddMode = mode === 'add';
 
@@ -102,8 +109,9 @@ export default function CommunityMembersScreen() {
             }
 
         } catch (error) {
-            console.error('Error fetching members:', error);
-            Alert.alert('Error', 'Failed to load data.');
+            console.log('[ERROR]:', 'Error fetching members:', error);
+            setToastType('error');
+            setToastMsg('Failed to load data.');
         } finally {
             setLoading(false);
         }
@@ -121,37 +129,34 @@ export default function CommunityMembersScreen() {
         return () => sub.remove();
     }, [fetchData, id, isAddMode]);
 
-    const handleRemoveMember = async (userId: string, memberName: string) => {
-        Alert.alert(
-            "Remove Member",
-            `Are you sure you want to remove ${memberName} from the community?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Remove",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            const { error } = await supabase
-                                .from('community_followers')
-                                .delete()
-                                .eq('community_id', id)
-                                .eq('user_id', userId);
+    const handleRemoveMember = (userId: string, memberName: string) => {
+        setMemberToRemove({ id: userId, name: memberName });
+        setShowRemoveModal(true);
+    };
 
-                            if (error) throw error;
+    const confirmRemoveMember = async () => {
+        if (!memberToRemove || isRemoving) return;
+        setIsRemoving(true);
+        try {
+            const { error } = await supabase
+                .from('community_followers')
+                .delete()
+                .eq('community_id', id)
+                .eq('user_id', memberToRemove.id);
 
-                            // Also remove from channels? ideally backend trigger, but we can try
-                            // For now just removing from community wrapper
+            if (error) throw error;
 
-                            setMembers(prev => prev.filter(m => m.user_id !== userId));
-                            Alert.alert("Success", "Member removed.");
-                        } catch (err) {
-                            Alert.alert("Error", "Failed to remove member.");
-                        }
-                    }
-                }
-            ]
-        );
+            setMembers(prev => prev.filter(m => m.user_id !== memberToRemove.id));
+            setToastType('success');
+            setToastMsg("Member removed.");
+            setShowRemoveModal(false);
+        } catch (err) {
+            setToastType('error');
+            setToastMsg("Failed to remove member.");
+        } finally {
+            setIsRemoving(false);
+            setMemberToRemove(null);
+        }
     };
 
     const handleAddMember = async (userId: string) => {
@@ -189,15 +194,17 @@ export default function CommunityMembersScreen() {
                     user_id: userId
                 }));
                 const { error: channelError } = await supabase.from('channel_followers').insert(channelInserts);
-                if (channelError) console.error("Error auto-joining channels:", channelError);
+                if (channelError) console.log('[ERROR]:', "Error auto-joining channels:", channelError);
             }
 
             DeviceEventEmitter.emit('refresh_community_members', id);
-            Alert.alert("Success", "Member added successfully.");
+            setToastType('success');
+            setToastMsg("Member added successfully.");
             setAllUsers(prev => prev.filter(u => u.id !== userId)); // Remove from list
         } catch (error) {
-            console.error(error);
-            Alert.alert("Error", "Failed to add member.");
+            console.log('[ERROR]:', error);
+            setToastType('error');
+            setToastMsg("Failed to add member.");
         } finally {
             setAdding(prev => {
                 const next = new Set(prev);
@@ -266,6 +273,16 @@ export default function CommunityMembersScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style="dark" backgroundColor="transparent" translucent />
+            <Toast message={toastMsg} onHide={() => setToastMsg(null)} type={toastType} />
+            <ConfirmationModal
+                visible={showRemoveModal}
+                title="Remove Member"
+                message={`Are you sure you want to remove ${memberToRemove?.name} from the community?`}
+                confirmText="Remove"
+                isLoading={isRemoving}
+                onConfirm={confirmRemoveMember}
+                onCancel={() => setShowRemoveModal(false)}
+            />
             <View style={styles.header}>
                 {/* Left */}
                 <View style={styles.headerSide}>

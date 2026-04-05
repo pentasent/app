@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Animated } from 'react-native';
 import { BeatTag } from '@/types';
 import { colors, spacing, borderRadius, shadows } from '@/constants/theme';
 import { getImageUrl } from '@/utils/get-image-url';
@@ -9,9 +9,32 @@ interface BeatTagListProps {
     tags: BeatTag[];
     selectedTag: string | null;
     onSelect: (tagId: string | null) => void;
+    loading?: boolean;
 }
 
-export const BeatTagList: React.FC<BeatTagListProps> = ({ tags, selectedTag, onSelect }) => {
+export const BeatTagList: React.FC<BeatTagListProps> = ({ tags, selectedTag, onSelect, loading }) => {
+    const opacity = React.useRef(new Animated.Value(0.3)).current;
+
+    React.useEffect(() => {
+        if (loading) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(opacity, {
+                        toValue: 0.7,
+                        duration: 1000,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(opacity, {
+                        toValue: 0.3,
+                        duration: 1000,
+                        useNativeDriver: true,
+                    })
+                ])
+            ).start();
+        } else {
+            opacity.setValue(1);
+        }
+    }, [loading]);
     return (
         <ScrollView
             horizontal
@@ -27,7 +50,7 @@ export const BeatTagList: React.FC<BeatTagListProps> = ({ tags, selectedTag, onS
                 activeOpacity={0.8}
             >
                 <ImageBackground
-                    source={{ uri: 'https://api.pentasent.com/storage/v1/object/public/avatars/beats/banner/allbeats.png' }}
+                    source={{ uri: 'https://cdn.pentasent.com/storage/object/public/avatars/beats/banner/allbeats.png' }}
                     style={styles.cardBackground}
                     imageStyle={styles.cardImage}
                 >
@@ -65,6 +88,15 @@ export const BeatTagList: React.FC<BeatTagListProps> = ({ tags, selectedTag, onS
                         </LinearGradient>
                     </ImageBackground>
                 </TouchableOpacity>
+            ))}
+
+            {loading && [1, 2, 3].map((i) => (
+                <Animated.View key={`shimmer-${i}`} style={[styles.tagCard, { opacity }]}>
+                    <View style={styles.shimmerGradient}>
+                        <View style={styles.shimmerTextLarge} />
+                        <View style={styles.shimmerTextSmall} />
+                    </View>
+                </Animated.View>
             ))}
         </ScrollView>
     );
@@ -114,5 +146,24 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.9)',
         fontSize: 10,
         fontWeight: '500',
+    },
+    shimmerGradient: {
+        flex: 1,
+        padding: spacing.sm,
+        justifyContent: 'flex-end',
+        backgroundColor: colors.borderLight,
+    },
+    shimmerTextLarge: {
+        width: 80,
+        height: 14,
+        backgroundColor: colors.border,
+        borderRadius: 4,
+        marginBottom: 6,
+    },
+    shimmerTextSmall: {
+        width: 50,
+        height: 10,
+        backgroundColor: colors.border,
+        borderRadius: 4,
     }
 });

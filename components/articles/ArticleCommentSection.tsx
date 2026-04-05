@@ -5,7 +5,7 @@ import { View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator 
 import { Heart, MoreHorizontal } from 'lucide-react-native';
 import { colors } from '../../constants/theme';
 import { ArticleComment } from '../../types/database';
-import { formatNumber } from '@/utils/format';
+import { formatNumber, formatDate } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
 
 interface ArticleCommentSectionProps {
@@ -30,12 +30,12 @@ interface ArticleCommentSectionProps {
     isReplyLoading?: boolean;
 }
 
-export const ArticleCommentSection = ({ 
-    comments, 
-    isLoading, 
-    commentCount, 
-    onLikeComment, 
-    onReply, 
+export const ArticleCommentSection = ({
+    comments,
+    isLoading,
+    commentCount,
+    onLikeComment,
+    onReply,
     currentUserId,
     onOptions,
     editingCommentId,
@@ -54,6 +54,34 @@ export const ArticleCommentSection = ({
 
     const [mainPage, setMainPage] = useState(1);
     const [expandedReplies, setExpandedReplies] = useState<Record<string, number>>({});
+    const [expandedText, setExpandedText] = useState<Record<string, boolean>>({});
+
+    const toggleTextExpand = (id: string) => {
+        setExpandedText(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const renderCommentText = (content: string, id: string) => {
+        if (!content) return null;
+        const words = content.split(/\s+/);
+        const isLong = words.length > 180;
+        const isExpanded = expandedText[id];
+        const displayedText = isLong && !isExpanded 
+            ? words.slice(0, 180).join(' ') + '...' 
+            : content;
+
+        return (
+            <View>
+                <Text style={styles.text}>{displayedText}</Text>
+                {isLong && (
+                    <TouchableOpacity onPress={() => toggleTextExpand(id)} style={{ marginBottom: 8 }}>
+                        <Text style={styles.readMoreBtn}>
+                            {isExpanded ? 'Show less' : 'Read more'}
+                        </Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+        );
+    };
 
     const showReplies = (id: string, count: number) => {
         setExpandedReplies(prev => ({ ...prev, [id]: count }));
@@ -62,7 +90,7 @@ export const ArticleCommentSection = ({
     const renderComment = ({ item, level = 0 }: { item: ArticleComment, level?: number }) => {
         const hasReplies = item.replies && item.replies.length > 0;
         const isEditing = editingCommentId === item.id;
-        
+
         // Pagination logic for replies
         const allReplies = item.replies || [];
         const visibleRepliesCount = expandedReplies[item.id] || 0;
@@ -72,18 +100,40 @@ export const ArticleCommentSection = ({
         return (
             <View key={item.id} style={[styles.commentContainer, level > 0 && styles.replyWrapper]}>
                 {level > 0 && <View style={styles.curvedLine} />}
-                
+
                 <Image
                     source={{ uri: getImageUrl(item.user?.avatar_url) }}
                     style={level > 0 ? styles.replyAvatar : styles.avatar}
                 />
 
                 <View style={styles.commentContent}>
-                    <View style={styles.commentHeader}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.username}>{item.user?.name || 'Member'}</Text>
-                            <Text style={styles.time}>{new Date(item.created_at).toLocaleDateString()}</Text>
+                    {/* <View style={styles.commentHeader}>
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={[styles.username]} numberOfLines={1}
+                            ellipsizeMode="tail">{item.user?.name || 'Member'}</Text>
+                            <Text style={styles.time}>{formatDate(item.created_at)}</Text>
                         </View>
+                        {currentUserId === item.user_id && !isEditing && (
+                            <TouchableOpacity onPress={() => onOptions?.(item)} style={{ padding: 4 }}>
+                                <MoreHorizontal size={18} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        )}
+                    </View> */}
+                    <View style={styles.commentHeader}>
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text
+                                style={[styles.username, { flexShrink: 1 }]}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                            >
+                                {item.user?.name || 'Member'}
+                            </Text>
+
+                            <Text style={styles.time}>
+                                {formatDate(item.created_at)}
+                            </Text>
+                        </View>
+
                         {currentUserId === item.user_id && !isEditing && (
                             <TouchableOpacity onPress={() => onOptions?.(item)} style={{ padding: 4 }}>
                                 <MoreHorizontal size={18} color={colors.textMuted} />
@@ -103,8 +153,8 @@ export const ArticleCommentSection = ({
                                 <TouchableOpacity onPress={onCancelEdit} style={styles.editActionBtn}>
                                     <Text style={styles.editActionTextCancel}>Cancel</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity 
-                                    onPress={onSaveEdit} 
+                                <TouchableOpacity
+                                    onPress={onSaveEdit}
                                     style={[styles.editActionBtn, styles.editActionBtnSave]}
                                     disabled={isEditingLoading || !editingText?.trim()}
                                 >
@@ -117,7 +167,7 @@ export const ArticleCommentSection = ({
                             </View>
                         </View>
                     ) : (
-                        <Text style={styles.text}>{item.content}</Text>
+                        renderCommentText(item.content, item.id)
                     )}
 
                     {!isEditing && (
@@ -145,7 +195,7 @@ export const ArticleCommentSection = ({
                                     >
                                         <Text style={styles.actionText}>Reply</Text>
                                     </TouchableOpacity>
-                                    
+
                                     {allReplies.length > 0 && (
                                         <TouchableOpacity
                                             style={[styles.actionButton, { marginLeft: 16 }]}
@@ -175,8 +225,8 @@ export const ArticleCommentSection = ({
                                 <TouchableOpacity onPress={onCancelReply} style={styles.editActionBtn}>
                                     <Text style={styles.editActionTextCancel}>Cancel</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity 
-                                    onPress={onSaveReply} 
+                                <TouchableOpacity
+                                    onPress={onSaveReply}
                                     style={[styles.editActionBtn, styles.editActionBtnSave]}
                                     disabled={isReplyLoading || !replyText?.trim()}
                                 >
@@ -202,10 +252,10 @@ export const ArticleCommentSection = ({
                                     </View>
                                 );
                             })}
-                            
+
                             {/* Nested Load More */}
                             {hiddenRepliesCount > 0 && (
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={() => showReplies(item.id, visibleRepliesCount + 5)}
                                     style={styles.loadMoreWrapper}
                                 >
@@ -220,7 +270,7 @@ export const ArticleCommentSection = ({
     };
 
     const displayCount = commentCount !== undefined ? commentCount : comments.length;
-    
+
     // Main comment pagination logic
     const visibleMainCount = mainPage * 20;
     const visibleMainComments = comments.slice(0, visibleMainCount);
@@ -231,15 +281,15 @@ export const ArticleCommentSection = ({
             {/* <Text style={styles.headerTitle}>Comments ({formatNumber(displayCount)})</Text> */}
             {isLoading ? (
                 <View style={{ padding: 20 }}>
-                     {[1, 2, 3].map(i => <CommentShimmer key={i} />)}
+                    {[1, 2, 3].map(i => <CommentShimmer key={i} />)}
                 </View>
             ) : (
                 <View style={styles.listContent}>
                     {visibleMainComments.map(comment => renderComment({ item: comment }))}
-                    
+
                     {/* Main List Show More */}
                     {hiddenMainCount > 0 && (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => setMainPage(prev => prev + 1)}
                             style={styles.mainLoadMore}
                         >
@@ -283,6 +333,7 @@ const styles = StyleSheet.create({
     commentHeader: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: 4,
         gap: 8,
     },
@@ -340,10 +391,10 @@ const styles = StyleSheet.create({
     },
     curvedLine: {
         position: 'absolute',
-        top: -30,
+        top: -50,
         left: 0,
         width: 16,
-        height: 50,
+        height: 65,
         borderBottomLeftRadius: 16,
         borderLeftWidth: 2,
         borderBottomWidth: 2,
@@ -415,4 +466,11 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontWeight: '700',
     },
+    readMoreBtn: {
+        fontSize: 12,
+        color: colors.primary,
+        fontWeight: '600',
+        marginTop: -4,
+        marginBottom: 8,
+    }
 });

@@ -26,11 +26,16 @@ export const Toast: React.FC<ToastProps> = ({ message, onHide, duration = 5000, 
                 speed: 12
             }).start();
 
-            const timer = setTimeout(() => {
-                hideToast();
-            }, duration);
+            let timer: any;
+            if (duration > 0) {
+                 timer = setTimeout(() => {
+                    hideToast();
+                }, duration);
+            }
 
-            return () => clearTimeout(timer);
+            return () => {
+                if (timer) clearTimeout(timer);
+            };
         }
     }, [message]);
 

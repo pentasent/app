@@ -86,7 +86,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
         } catch (e) {
-            console.error("Error fetching metadata", e);
+            console.log('[ERROR]:', "Error fetching metadata", e);
         }
     };
 
@@ -203,7 +203,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setPage(pageNumber);
 
         } catch (error) {
-            console.error('Error fetching posts:', error);
+            console.log('[ERROR]:', 'Error fetching posts:', error);
             // No mock fallback
         } finally {
             setLoading(false);
@@ -298,7 +298,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                     const imageInserts = await Promise.all(uploadPromises);
                     const { error: imgError } = await supabase.from('post_images').insert(imageInserts);
-                    if (imgError) console.error("Error inserting images", imgError);
+                    if (imgError) console.log('[ERROR]:', "Error inserting images", imgError);
                     
                     post.images = imageInserts;
                 }
@@ -316,7 +316,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setPosts(current => current.map(p => p.id === tempId ? { ...tempPost, ...post, is_uploading: false, _tempId: tempId } : p));
 
             } catch (error) {
-                console.error('Background Create Post Error:', error);
+                console.log('[ERROR]:', 'Background Create Post Error:', error);
                 // Remove temp post on failure
                 setPosts(current => current.filter(p => p.id !== tempId));
                 Alert.alert("Error", "Failed to create post. Please try again.");
@@ -382,7 +382,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 console.log(`Post ${postId} deleted successfully from server.`);
             } catch (error) {
-                console.error("Background delete error:", error);
+                console.log('[ERROR]:', "Background delete error:", error);
                 setPosts(originalPosts);
                 Alert.alert("Sync Error", "Failed to remove post from server. Restoring post.");
             }
@@ -439,7 +439,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     .eq('id', postId);
             }
         } catch (error) {
-            console.error('Error toggling like:', error);
+            console.log('[ERROR]:', 'Error toggling like:', error);
             // Revert optimistic update if failed
             setPosts(current =>
                 current.map(p =>
@@ -478,7 +478,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .update({ views_count: newViewsCount })
                 .eq('id', postId);
         } catch (error) {
-            console.error('Error incrementing view count:', error);
+            console.log('[ERROR]:', 'Error incrementing view count:', error);
             updatePost(postId, { views_count: post.views_count });
         }
     };
@@ -522,7 +522,7 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 updatePost(postId, mergedData as any);
             }
         } catch (error) {
-            console.error('Error refreshing single post:', error);
+            console.log('[ERROR]:', 'Error refreshing single post:', error);
         }
     };
 
@@ -572,29 +572,43 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return fetchPosts(0, false);
     }, [fetchPosts, fetchCommunitiesAndChannels]);
 
+    const contextValue = React.useMemo(() => ({
+        posts,
+        loading,
+        refreshing,
+        loadingMore,
+        hasMorePosts,
+        onRefresh,
+        refreshFeed,
+        loadMorePosts,
+        createPost,
+        likePost,
+        updatePost,
+        removePost,
+        sharePost,
+        viewPost,
+        deletePost,
+        refreshSinglePost,
+        communities,
+        channels,
+        selectedCommunityId,
+        setSelectedCommunityId
+    }), [
+        posts,
+        loading,
+        refreshing,
+        loadingMore,
+        hasMorePosts,
+        onRefresh,
+        refreshFeed,
+        loadMorePosts,
+        communities,
+        channels,
+        selectedCommunityId
+    ]);
+
     return (
-        <FeedContext.Provider value={{
-            posts,
-            loading,
-            refreshing,
-            loadingMore,
-            hasMorePosts,
-            onRefresh,
-            refreshFeed,
-            loadMorePosts,
-            createPost,
-            likePost,
-            updatePost,
-            removePost,
-            sharePost,
-            viewPost,
-            deletePost,
-            refreshSinglePost,
-            communities,
-            channels,
-            selectedCommunityId,
-            setSelectedCommunityId
-        }}>
+        <FeedContext.Provider value={contextValue}>
             {children}
         </FeedContext.Provider>
     );

@@ -2,6 +2,7 @@ import { CustomImage as Image } from '@/components/CustomImage';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, SafeAreaView, FlatList, RefreshControl, Dimensions } from 'react-native';
+import crashlytics from '@/lib/crashlytics';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
@@ -33,7 +34,8 @@ export default function YogaListingScreen() {
             if (error) throw error;
             setYogaContents(data || []);
         } catch (error) {
-            console.error('Error fetching yoga contents:', error);
+            console.log('[ERROR]:', 'Error fetching yoga contents:', error);
+            crashlytics().recordError(error as any);
         } finally {
             setLoading(false);
             setRefreshing(false);

@@ -27,7 +27,7 @@ import { COUNTRIES } from '@/lib/country';
 import { getImageUrl } from '@/utils/get-image-url';
 // import { useEffect } from 'react';
 // import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import crashlytics from '@/lib/crashlytics';
 
 export default function SetupProfileScreen() {
     const { user, refreshUser } = useAuth();
@@ -147,6 +147,7 @@ export default function SetupProfileScreen() {
             }
 
         } catch (error: any) {
+            crashlytics().recordError(error);
             setErrorMsg(error.message || 'Failed to finish setting up your profile.');
         } finally {
             setLoading(false);

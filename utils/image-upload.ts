@@ -15,7 +15,7 @@ export const compressImage = async (uri: string, maxWidth = 1200, quality = 0.8)
         );
         return result.uri;
     } catch (error) {
-        console.error('Error compressing image:', error);
+        console.log('[ERROR]:', 'Error compressing image:', error);
         return uri; // Return original if compression fails
     }
 };
@@ -46,7 +46,7 @@ export const uploadImage = async (uri: string, filename: string) => {
         if (error) throw error;
         return data;
     } catch (error) {
-        console.error('Fast upload failed:', error);
+        console.log('[ERROR]:', 'Fast upload failed:', error);
         throw error;
     }
 };

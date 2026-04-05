@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Platform, ActivityIndicator, Alert, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
+import crashlytics from '@/lib/crashlytics';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
 import {
     ChevronLeft,
@@ -20,6 +21,7 @@ import { getImageUrl } from '@/utils/get-image-url';
 import { CustomImage as Image } from '../../components/CustomImage';
 import { UserNotificationSetting } from '../../types';
 import { NotificationSettingsShimmer } from '../../components/shimmers/NotificationSettingsShimmer';
+import { Toast } from '@/components/Toast';
 
 export default function NotificationSettingsScreen() {
     const router = useRouter();
@@ -27,6 +29,7 @@ export default function NotificationSettingsScreen() {
     const [settings, setSettings] = useState<UserNotificationSetting[]>([]);
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState<string | null>(null);
+    const [toastMsg, setToastMsg] = useState<string | null>(null);
 
     useEffect(() => {
         fetchSettings();
@@ -46,8 +49,9 @@ export default function NotificationSettingsScreen() {
             if (error) throw error;
             setSettings(data || []);
         } catch (error) {
-            console.error('Error fetching settings:', error);
-            Alert.alert('Error', 'Failed to load notification settings');
+            console.log('[ERROR]:', 'Error fetching settings:', error);
+            crashlytics().recordError(error as any);
+            setToastMsg('Failed to load notification settings');
         } finally {
             setLoading(false);
         }
@@ -69,10 +73,11 @@ export default function NotificationSettingsScreen() {
 
             if (error) throw error;
         } catch (error) {
-            console.error('Error updating setting:', error);
+            console.log('[ERROR]:', 'Error updating setting:', error);
+            crashlytics().recordError(error as any);
             // Revert on error
             setSettings(prev => prev.map(s => s.id === settingId ? { ...s, [field]: currentValue } : s));
-            Alert.alert('Error', 'Failed to update setting');
+            setToastMsg('Failed to update setting');
         } finally {
             setUpdating(null);
         }
@@ -136,6 +141,7 @@ export default function NotificationSettingsScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
+            <Toast message={toastMsg} onHide={() => setToastMsg(null)} />
             <StatusBar style="dark" />
 
             {/* Header */}

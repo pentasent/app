@@ -10,6 +10,7 @@ import {
     CheckSquare,
     ShoppingBag,
     Newspaper,
+    TrendingUp,
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -31,7 +32,8 @@ const EXPLORE_ITEMS: ExploreItem[] = [
     { id: '3', title: 'Meditation', icon: Wind, route: '/meditation', color: colors.info }, // Sky
     { id: '4', title: 'Tasks', icon: CheckSquare, route: '/tasks', color: colors.warning }, // Peach
     { id: '5', title: 'Articles', icon: Newspaper, route: '/articles', color: '#E5989B' }, // Dusty Rose
-    // { id: '6', title: 'Yoga', icon: Activity, route: '/yoga', color: '#B4A6C9' }, // Lavender
+    { id: '6', title: 'Pulse', icon: TrendingUp, route: '/pulse', color: colors.primary }, // Activity
+    // { id: '7', title: 'Yoga', icon: Activity, route: '/yoga', color: '#B4A6C9' }, // Lavender
     // { id: '6', title: 'Products', icon: ShoppingBag, route: '/products', color: '#C9B6A6' }, // Warm beige
     // { id: '7', title: 'Cure', icon: HeartPulse, route: '/coming-soon', color: '#D8A7A7' },      // Soft muted rose
     // { id: '8', title: 'Courses', icon: GraduationCap, route: '/coming-soon', color: '#B5B8D6' }, // Soft dusty indigo

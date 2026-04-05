@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
+import crashlytics from '@/lib/crashlytics';
 import { Chat, Routine, CartItem, Notification, Message, RoutineTask } from '../types';
 import { diseases } from '../constants/dummyData';
 import { supabase, useAuth } from './AuthContext';
@@ -24,6 +26,10 @@ interface AppContextType {
   markAllNotificationsRead: () => Promise<void>;
   fetchNotifications: () => Promise<void>;
   addNotification: (notification: Partial<Notification>) => Promise<void>;
+  showToast: (message: string, type?: 'success' | 'error' | 'info', duration?: number) => void;
+  toast: { message: string | null; type: 'success' | 'error' | 'info'; duration: number };
+  hideToast: () => void;
+  isConnected: boolean | null;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -35,6 +41,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isConnected, setIsConnected] = useState<boolean | null>(true);
+  const [toast, setToast] = useState<{ message: string | null; type: 'success' | 'error' | 'info'; duration: number }>({
+    message: null,
+    type: 'info',
+    duration: 5000
+  });
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info', duration: number = 5000) => {
+    setToast(prev => {
+      if (prev.message === message && prev.type === type && prev.duration === duration) {
+        return prev;
+      }
+      return { message, type, duration };
+    });
+  }, []);
+
+  const hideToast = useCallback(() => {
+    setToast(prev => ({ ...prev, message: null }));
+  }, []);
+
+  // 1. Unified Network Observer
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      const isOnline = !!state.isConnected && !!state.isInternetReachable;
+      
+      setIsConnected(prev => {
+        if (prev !== isOnline) {
+             // Handle the "lost connection" toast logic inside the context
+             // only if the toast is the network-related one
+             if (!isOnline) {
+                // If it's not verified, we'll let the RootLayout trigger the NoInternetScreen
+                // But for already in-app users, we trigger a global toast
+                if (user && user.is_onboarded) {
+                    showToast("Connection lost. Reconnecting to mission control...", "error", 0);
+                }
+             } else {
+                 setToast(current => {
+                    if (current.message === "Connection lost. Reconnecting to mission control...") {
+                        return { ...current, message: null };
+                    }
+                    return current;
+                 });
+             }
+        }
+        return isOnline;
+      });
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     loadData();
@@ -78,7 +134,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setUnreadCount(unread);
       }
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.log('[ERROR]:', 'Error fetching notifications:', error);
+      crashlytics().recordError(error as any);
     }
   };
 
@@ -148,7 +205,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // }
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.log('[ERROR]:', 'Error loading data:', error);
+      crashlytics().recordError(error as any);
     }
   };
 
@@ -164,7 +222,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // AsyncStorage.setItem('notifications', JSON.stringify(notifications)), // Sync with Supabase instead
       ]);
     } catch (error) {
-      console.error('Error saving data:', error);
+      console.log('[ERROR]:', 'Error saving data:', error);
+      crashlytics().recordError(error as any);
     }
   };
 
@@ -309,7 +368,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error marking notification read', error);
+      console.log('[ERROR]:', 'Error marking notification read', error);
+      crashlytics().recordError(error as any);
       fetchNotifications(); // Revert on error
     }
   };
@@ -331,7 +391,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error marking all notifications read', error);
+      console.log('[ERROR]:', 'Error marking all notifications read', error);
+      crashlytics().recordError(error as any);
       fetchNotifications(); // Revert on error
     }
   };
@@ -351,35 +412,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Force immediate refresh for the current user
       await fetchNotifications();
     } catch (e) {
-      console.error('Error adding notification:', e);
+      console.log('[ERROR]:', 'Error adding notification:', e);
+      crashlytics().recordError(e as any);
     }
   };
 
-  return (
-    <AppContext.Provider
-      value={{
-        chats,
-        routines,
-        cart,
-        notifications,
-        addChat,
-        updateChat,
-        addMessageToChat,
-        deleteChat,
-        createRoutineFromChat,
-        addToCart,
-        removeFromCart,
-        updateCartQuantity,
-        clearCart,
-        updateRoutineTask,
-        markNotificationRead,
-        markAllNotificationsRead,
-        fetchNotifications,
-        unreadCount,
-        addNotification,
+  const contextValue = React.useMemo(() => ({
+    chats,
+    routines,
+    cart,
+    notifications,
+    addChat,
+    updateChat,
+    addMessageToChat,
+    deleteChat,
+    createRoutineFromChat,
+    addToCart,
+    removeFromCart,
+    updateCartQuantity,
+    clearCart,
+    updateRoutineTask,
+    markNotificationRead,
+    markAllNotificationsRead,
+    fetchNotifications,
+    unreadCount,
+    addNotification,
+    showToast,
+    toast,
+    hideToast,
+    isConnected,
+  }), [
+    chats, routines, cart, notifications, addChat, updateChat, addMessageToChat,
+    deleteChat, createRoutineFromChat, addToCart, removeFromCart, updateCartQuantity,
+    clearCart, updateRoutineTask, markNotificationRead, markAllNotificationsRead,
+    fetchNotifications, unreadCount, addNotification, showToast, toast, hideToast,
+    isConnected
+  ]);
 
-      }}
-    >
+  return (
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

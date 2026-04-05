@@ -114,7 +114,7 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
 
         } catch (error: any) {
             setToastMsg(error.message || 'Failed to update profile.');
-            console.error(error);
+            console.log('[ERROR]:', error);
         } finally {
             setLoading(false);
         }

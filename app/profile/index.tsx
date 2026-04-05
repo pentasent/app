@@ -1,4 +1,5 @@
 import { CustomImage as Image } from '@/components/CustomImage';
+import crashlytics from '@/lib/crashlytics';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -8,28 +9,21 @@ import {
   SafeAreaView,
   TouchableOpacity,
   RefreshControl,
-  Platform,
   Dimensions,
 } from 'react-native';
 import {
   Mail,
   MapPin,
-  Calendar,
   Edit3,
-  LogOut,
   ChevronRight,
   ArrowLeft,
-  Globe,
-  Shield,
-  FileText,
-  Lock,
-  Baby,
   Bell,
   MessageSquare,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, supabase } from '../../contexts/AuthContext';
-import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
+import Constants from 'expo-constants';
+import { colors, spacing, borderRadius } from '../../constants/theme';
 import LoggoutButton from '@/components/Loggout';
 import { EditProfileDialog } from '../../components/profile/EditProfileDialog';
 import { WavePattern } from '@/components/profile/WavePattern';
@@ -52,6 +46,7 @@ export default function ProfileScreen() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [localUser, setLocalUser] = useState(user);
   const hasLoadedStats = React.useRef(false);
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
 
   useEffect(() => {
     setLocalUser(user);
@@ -94,20 +89,28 @@ export default function ProfileScreen() {
         setJournalCount(jCount);
       }
     } catch (e) {
-      console.error(e);
+      console.log('[ERROR]:', e);
+      crashlytics().recordError(e as any);
     }
   };
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchStats();
-    // Ideally we would also refresh AuthContext user here. 
-    // Since we don't have a direct 'refreshUser' exposed, we can fetch manually to update local view.
-    if (user) {
-      const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
-      if (data) setLocalUser({ ...user, ...data });
+    try {
+      setRefreshing(true);
+      await fetchStats();
+      // Ideally we would also refresh AuthContext user here. 
+      // Since we don't have a direct 'refreshUser' exposed, we can fetch manually to update local view.
+      if (user) {
+        const { data, error } = await supabase.from('users').select('*').eq('id', user.id).single();
+        if (error) throw error;
+        if (data) setLocalUser({ ...user, ...data });
+      }
+    } catch (e) {
+      console.log('[ERROR]:', e);
+      crashlytics().recordError(e as any);
+    } finally {
+      setRefreshing(false);
     }
-    setRefreshing(false);
   }, [user]);
 
   const { width } = Dimensions.get('window');
@@ -138,7 +141,7 @@ export default function ProfileScreen() {
             {/* Back Button */}
             <TouchableOpacity
               style={styles.backButtonBanner}
-              onPress={() => router.replace('/(tabs)')}
+              onPress={() => router.back()}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <View style={styles.iconContainer}>
@@ -325,7 +328,7 @@ export default function ProfileScreen() {
 
           {/* Developer Info Footer */}
           <View style={styles.footerInfo}>
-            <Text style={styles.versionText}>App Version 1.0.0</Text>
+            <Text style={styles.versionText}>App Version {appVersion}</Text>
             <Text style={styles.developerText}>Developed by Pentasent Inc.</Text>
             <Text style={styles.tagline}>Take Back Control of Your Mind and Senses</Text>
           </View>
@@ -473,6 +476,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: spacing.md,
+    fontWeight: 600,
+    fontSize: 16,
   },
   contactUsTrigger: {
     flexDirection: 'row',

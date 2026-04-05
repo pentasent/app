@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Alert } from 'react-native';
+import crashlytics from '@/lib/crashlytics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { User } from '../types/database';
@@ -48,15 +49,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     //     const { data: { user }, error } = await supabase.auth.getUser();
 
     //     if (error || !user) {
-    //       await supabase.auth.signOut().catch(console.error);
+    //       await supabase.auth.signOut().catch(e => console.log('[ERROR]:', e);
     //       setLoading(false);
     //       return;
     //     }
 
     //     await fetchAndSetUserData(user.id, user.email || '');
     //   } catch (e) {
-    //     console.error("Initial session fetch error:", e);
-    //     await supabase.auth.signOut().catch(console.error);
+    //     console.log('[ERROR]:', "Initial session fetch error:", e);
+    //     await supabase.auth.signOut().catch(e => console.log('[ERROR]:', e);
     //     setLoading(false);
     //   }
     // };
@@ -67,7 +68,7 @@ const initializeAuth = async () => {
     if (error) {
       // If refresh token is missing or invalid, it means session is truly dead
       if (error.message.includes('Refresh Token Not Found') || error.message.includes('refresh_token_not_found') || error.message.includes('Invalid Refresh Token')) {
-        await supabase.auth.signOut().catch(console.error);
+        await supabase.auth.signOut().catch(e => console.log('[ERROR]:', e));
         Alert.alert("Session Expired", "Your session has expired. Please log in again.");
       } else {
         console.warn("Session retrieval error:", error.message);
@@ -77,7 +78,7 @@ const initializeAuth = async () => {
     }
 
     if (!session?.user) {
-      await supabase.auth.signOut().catch(console.error);
+      await supabase.auth.signOut().catch(e => console.log('[ERROR]:', e));
       setLoading(false);
       return;
     }
@@ -87,8 +88,9 @@ const initializeAuth = async () => {
 
     await fetchAndSetUserData(session.user.id, session.user.email || '');
   } catch (e) {
-    console.error("Initial session fetch error:", e);
-    await supabase.auth.signOut().catch(console.error);
+    console.log('[ERROR]:', "Initial session fetch error:", e);
+    crashlytics().recordError(e as any);
+    await supabase.auth.signOut().catch(e => console.log('[ERROR]:', e));
     setLoading(false);
   }
 };
@@ -181,7 +183,7 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
           .single();
 
         if (insertError) {
-          console.error("Failed to insert into public.users:", insertError);
+          console.log('[ERROR]:', "Failed to insert into public.users:", insertError);
           // Fallback to draft user if insert fails
           const draftUser: User = {
             id: userId,
@@ -204,7 +206,8 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
         setIsAdmin(email === 'hello@pentasent.com');
       }
     } catch (e) {
-      console.error("Error fetching public user data:", e);
+      console.log('[ERROR]:', "Error fetching public user data:", e);
+      crashlytics().recordError(e as any);
     } finally {
       setLoading(false);
     }
@@ -250,6 +253,7 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
       setOtpType('signup');
 
     } catch (error: any) {
+      crashlytics().recordError(error);
       throw new Error(error.message || 'Registration failed');
     }
   };
@@ -292,6 +296,7 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
       // onAuthStateChange handles the rest
 
     } catch (error: any) {
+      crashlytics().recordError(error);
       throw error; // Re-throw the original error to be caught by the component
     }
   };
@@ -301,6 +306,7 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch (error) {
+      crashlytics().recordError(error as any);
       throw error;
     }
   };
@@ -326,6 +332,7 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
       });
       if (error) throw error;
     } catch (error: any) {
+      crashlytics().recordError(error);
       throw new Error(error.message || 'Reset password failed');
     }
   };
@@ -385,33 +392,41 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(
         // Refresh to get final server state
         await refreshUser();
       } catch (error) {
-        console.error('Background Profile Update Failed:', error);
+        console.log('[ERROR]:', 'Background Profile Update Failed:', error);
+        crashlytics().recordError(error as any);
         // On failure, revert optimistic update
         await refreshUser();
       }
     })();
   };
 
+  const contextValue = React.useMemo(() => ({
+    user,
+    isAdmin,
+    loading,
+    login,
+    register,
+    logout,
+    refreshUser,
+    resetPassword,
+    updateProfile,
+    unverifiedEmail,
+    setUnverifiedEmail,
+    otpType,
+    setOtpType,
+    isResetVerified,
+    setIsResetVerified,
+  }), [
+    user,
+    isAdmin,
+    loading,
+    unverifiedEmail,
+    otpType,
+    isResetVerified,
+  ]);
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAdmin,
-        loading,
-        login,
-        register,
-        logout,
-        refreshUser,
-        resetPassword,
-        updateProfile,
-        unverifiedEmail,
-        setUnverifiedEmail,
-        otpType,
-        setOtpType,
-        isResetVerified,
-        setIsResetVerified,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

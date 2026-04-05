@@ -12,9 +12,11 @@ import { StatusBar } from 'expo-status-bar';
 import { ChannelDetailDialog } from '../../components/community/ChannelDetailDialog';
 import { CommunityDetailShimmer } from '../../components/shimmers/CommunityDetailShimmer';
 import { Toast } from '../../components/Toast';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { useApp } from '../../contexts/AppContext';
 import { formatNumber } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
+import crashlytics from '@/lib/crashlytics';
 
 export default function CommunityDetailScreen() {
     const { id, name, description, logo_url, banner_url, followers_count } = useLocalSearchParams();
@@ -58,6 +60,8 @@ export default function CommunityDetailScreen() {
     const [channelActionLoading, setChannelActionLoading] = useState(false);
     const [toastMsg, setToastMsg] = useState<string | null>(null);
     const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('info');
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Fade animation for smooth header loading
     const headerFadeAnim = React.useRef(new Animated.Value(0)).current;
@@ -204,9 +208,10 @@ export default function CommunityDetailScreen() {
 
             setStats({ postsCount: postsCount || 0 });
 
-        } catch (error) {
-            console.error('Error fetching community details:', error);
-            Alert.alert('Error', 'Failed to load community details.');
+        } catch (error:any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', 'Error fetching community details:', error);
+            setToastMsg('Failed to load community details.');
             router.back();
         } finally {
             setLoading(false);
@@ -338,7 +343,7 @@ export default function CommunityDetailScreen() {
                         .from('channel_followers')
                         .insert(channelInserts);
 
-                    if (channelError) console.error('Error joining channels:', channelError);
+                    if (channelError) console.log('[ERROR]:', 'Error joining channels:', channelError);
                 }
 
                 // Join Community Chats
@@ -400,9 +405,10 @@ export default function CommunityDetailScreen() {
                     });
                 }
             }
-        } catch (error) {
-            console.error('Error joining/leaving community:', error);
-            Alert.alert('Error', 'Failed to update membership.');
+        } catch (error:any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', 'Error joining/leaving community:', error);
+            setToastMsg('Failed to update membership.');
             // Revert optimistic updates if failed (could implement full revert logic here, but fetch is safer if error occurs)
             fetchData();
         } finally {
@@ -432,9 +438,10 @@ export default function CommunityDetailScreen() {
                 setSelectedChannel(prev => prev ? { ...prev, isJoined: true, followers_count: prev.followers_count + 1 } : null);
             }
 
-        } catch (error) {
-            console.error("Error joining channel", error);
-            Alert.alert("Error", "Failed to join channel.");
+        } catch (error:any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', "Error joining channel", error);
+            setToastMsg("Failed to join channel.");
         } finally {
             setChannelActionLoading(false);
         }
@@ -463,29 +470,22 @@ export default function CommunityDetailScreen() {
                 setSelectedChannel(prev => prev ? { ...prev, isJoined: false, followers_count: Math.max(0, prev.followers_count - 1) } : null);
             }
 
-        } catch (error) {
-            console.error("Error leaving channel", error);
-            Alert.alert("Error", "Failed to leave channel.");
+        } catch (error:any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', "Error leaving channel", error);
+            setToastMsg("Failed to leave channel.");
         } finally {
             setChannelActionLoading(false);
         }
     };
 
-    const handleDeleteCommunity = async () => {
-        Alert.alert(
-            "Delete Community",
-            "Are you sure you want to delete this community? This action cannot be undone.",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        Alert.alert("Coming Soon", "Delete functionality is coming soon.");
-                    }
-                }
-            ]
-        );
+    const handleDeleteCommunity = () => {
+        setShowDeleteModal(true);
+    };
+
+    const confirmDeleteCommunity = async () => {
+        setToastMsg("Delete functionality is coming soon.");
+        setShowDeleteModal(false);
     };
 
     if (!community) return null;
@@ -676,7 +676,7 @@ export default function CommunityDetailScreen() {
                                             ]}
                                             onPress={() => {
                                                 if (!isJoined) {
-                                                    Alert.alert("Join Community", "You must join the community to view channels.");
+                                                    setToastMsg("You must join the community to view channels.");
                                                     return;
                                                 }
                                                 setSelectedChannel(channel);
@@ -780,6 +780,16 @@ export default function CommunityDetailScreen() {
                         </View>
                         : ""
                 }
+
+                {/* Confirmation Modal */}
+                <ConfirmationModal
+                    visible={showDeleteModal}
+                    title="Delete Community"
+                    message="Are you sure you want to delete this community? This action cannot be undone."
+                    confirmText="Delete"
+                    onConfirm={confirmDeleteCommunity}
+                    onCancel={() => setShowDeleteModal(false)}
+                />
             </ScrollView>
 
             {/* Moderator Modal */}

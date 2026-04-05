@@ -70,11 +70,12 @@ export const FlexibleCustomImage = (props: FlexibleCustomImageProps) => {
 
     const style = StyleSheet.flatten(props.style);
     const hasFixedHeight = !!(style as any)?.height;
-    
     const containerStyle = [
         styles.container,
         style,
-        (aspectRatio && !hasFixedHeight) ? { aspectRatio } : (!hasFixedHeight ? { height: 250 } : {})
+        (aspectRatio && !hasFixedHeight) 
+            ? { aspectRatio, height: undefined } // height: undefined is important to override any defaults
+            : (!hasFixedHeight && !aspectRatio ? { height: 250 } : {})
     ];
 
     const iconSize = ((style as any)?.height || 250) < 50 ? 20 : 32;

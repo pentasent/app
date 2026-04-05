@@ -445,3 +445,18 @@ export interface ArticleTagMap {
     article_id: string;
     tag_id: string;
 }
+
+export interface UserDailyCheckin {
+    id: string;
+    user_id: string;
+    mood_score: number; // 1-5
+    energy_level: number; // 1-5
+    stress_level: number; // 1-5
+    sleep_quality: number; // 1-5
+    mood_tag: string; // happy, calm, neutral, sad, anxious, tired
+    notes?: string | null;
+    suggested_action?: string | null;
+    suggested_content_id?: string | null;
+    checkin_date: string; // YYYY-MM-DD
+    created_at: string;
+}

@@ -5,18 +5,9 @@ import { View, Text, TouchableOpacity, StyleSheet, Pressable, ActivityIndicator 
 import { Heart, MessageCircle, Share2, MoreHorizontal, Eye, BarChart2, BarChart, BarChart3, BarChart4 } from 'lucide-react-native';
 import { colors, spacing } from '../../constants/theme';
 import { Post } from '../../types/database';
-import Animated, { 
-    useSharedValue, 
-    useAnimatedStyle, 
-    withRepeat, 
-    withTiming, 
-    withSequence,
-    withDelay
-} from 'react-native-reanimated';
-import { CloudUpload } from 'lucide-react-native';
 import { DotsLoader } from '../DotsLoader';
 
-import { formatNumber } from '../../utils/format';
+import { formatNumber, formatDate } from '../../utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
 
 interface PostCardProps {
@@ -28,7 +19,7 @@ interface PostCardProps {
     onMore?: () => void;
 }
 
-export const PostCard = ({ post, onPress, onLike, onComment, onShare, onMore }: PostCardProps) => {
+export const PostCard = React.memo(({ post, onPress, onLike, onComment, onShare, onMore }: PostCardProps) => {
     // Extract text from JSONB doc if needed
     const getContentText = (content: any) => {
         if (typeof content === 'string') return content;
@@ -72,7 +63,7 @@ export const PostCard = ({ post, onPress, onLike, onComment, onShare, onMore }: 
                                 <Text style={styles.time}>
                                     {post.is_uploading 
                                         ? 'Just now' 
-                                        : new Date(post.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                        : formatDate(post.created_at)}
                                 </Text> 
                             </View>
                         </View>
@@ -82,7 +73,19 @@ export const PostCard = ({ post, onPress, onLike, onComment, onShare, onMore }: 
                 {/* Content */}
                 <View style={styles.contentContainer}>
                     {post.title && <Text style={styles.title}>{post.title}</Text>}
-                    <Text style={styles.bodyText} numberOfLines={post.is_uploading ? 5 : 3}>{postContent}</Text>
+                    {(() => {
+                        const isLong = postContent.length > 150;
+                        const content = (isLong && !post.is_uploading) ? postContent.substring(0, 150).trim() : postContent;
+                        
+                        return (
+                            <Text style={styles.bodyText}>
+                                {content}
+                                {isLong && !post.is_uploading && (
+                                    <Text style={styles.moreText}> ...more</Text>
+                                )}
+                            </Text>
+                        );
+                    })()}
                 </View>
 
                 {/* Media */}
@@ -162,7 +165,7 @@ export const PostCard = ({ post, onPress, onLike, onComment, onShare, onMore }: 
             </Pressable>
         </View>
     );
-};
+});
 
 const styles = StyleSheet.create({
     container: {
@@ -222,6 +225,11 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: colors.text,
         lineHeight: 20,
+    },
+    moreText: {
+        fontSize: 14,
+        color: colors.textMuted,
+        fontWeight: '600',
     },
     postImage: {
         width: '100%',

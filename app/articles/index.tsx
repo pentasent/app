@@ -14,6 +14,7 @@ import {
   Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
 import {
@@ -33,12 +34,14 @@ import { getImageUrl } from '@/utils/get-image-url';
 import { CustomImage as Image } from '@/components/CustomImage';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
 import { LinearGradient } from 'expo-linear-gradient';
+import crashlytics from '@/lib/crashlytics';
 
 const { width } = Dimensions.get('window');
 const PAGE_SIZE = 20;
 
 export default function ArticlesScreen() {
   const router = useRouter();
+  const { showToast } = useApp();
   const [articles, setArticles] = useState<any[]>([]);
   const [tags, setTags] = useState<ArticleTag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,8 +65,9 @@ export default function ArticlesScreen() {
       
       if (error) throw error;
       setTags(data || []);
-    } catch (error) {
-      console.error('Error fetching tags:', error);
+    } catch (error:any) {
+      crashlytics().recordError(error);
+      console.log('[ERROR]:', 'Error fetching tags:', error);
     }
   };
 
@@ -133,14 +137,16 @@ export default function ArticlesScreen() {
       }
 
       setHasMore(formattedArticles.length === PAGE_SIZE);
-    } catch (error) {
-      console.error('Error fetching articles:', error);
+    } catch (error:any) {
+      crashlytics().recordError(error);
+      console.log('[ERROR]:', 'Error fetching articles:', error);
+      showToast("Could not load articles. Reconnecting...", "error");
     } finally {
       setLoading(false);
       setLoadingMore(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [showToast]);
 
   // Initial Fetch
   useEffect(() => {
@@ -200,22 +206,25 @@ export default function ArticlesScreen() {
               style={styles.bannerImage}
             />
           )}
-          
-          {/* Top Row Overlay: Read Time & Tag */}
-          <View style={styles.overlayTop}>
-             {item.tags?.[0] && (
-              <View style={styles.tagBadge}>
-                <Text style={styles.tagBadgeText}>{item.tags[0].name}</Text>
-              </View>
-            )}
-            <View style={styles.readTimeBadge}>
-              <Clock size={12} color="#FFF" />
-              <Text style={styles.readTimeText}>{item.reading_time || 0} min</Text>
-            </View>
-          </View>
         </View>
 
         <View style={styles.cardInfo}>
+          {/* Metadata row: Tag & Read Time */}
+          <View style={styles.badgeRow}>
+             {item.tags?.[0] && (
+               <>
+                <View style={styles.tagBadge}>
+                  <Text style={styles.tagBadgeText}>{item.tags[0].name}</Text>
+                </View>
+                <View style={styles.badgeDivider} />
+               </>
+            )}
+            <View style={styles.readTimeBadge}>
+              <Clock size={12} color={colors.textLight} />
+              <Text style={styles.readTimeText}>{item.reading_time || 0} min read</Text>
+            </View>
+          </View>
+
           <Text style={styles.articleTitle} numberOfLines={2}>
             {item.title}
           </Text>
@@ -247,49 +256,42 @@ export default function ArticlesScreen() {
         </View>
       </View>
       <View style={{ flex: 1 }}>
-        {loading && page === 0 ? (
-          <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <ArticleCardShimmer key={i} />
-            ))}
-          </ScrollView>
-        ) : (
-          <FlatList
-            data={articles}
-            keyExtractor={(item) => item.id}
-            renderItem={renderArticleCard}
-            contentContainerStyle={styles.listContent}
-            onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.5}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
-            }
-            ListFooterComponent={
-              loadingMore ? (
-                <View style={styles.footerLoader}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                </View>
-              ) : !hasMore && articles.length > 0 ? (
-                <View style={styles.endContainer}>
-                  <View style={styles.endDivider} />
-                  <Newspaper size={24} color={colors.textLight} style={{ opacity: 0.5 }} />
-                  <Text style={styles.endText}>You've reached the end. 📝</Text>
-                  <Text style={styles.endSubtext}>We keep adding latest articles for you.</Text>
-                </View>
-              ) : null
-            }
-            ListEmptyComponent={
-              !loading ? (
-                <View style={styles.emptyContainer}>
-                  <BookOpen size={48} color={colors.textLight} />
-                  <Text style={styles.emptyText}>
-                    {searchQuery ? `No matching articles found.` : "No articles available yet."}
-                  </Text>
-                </View>
-              ) : null
-            }
-          />
-        )}
+        <FlatList
+          data={loading && page === 0 ? [1, 2, 3, 4, 5] : articles}
+          showsVerticalScrollIndicator={false}
+          keyExtractor={(item, index) => (loading && page === 0) ? `shimmer-${index}` : item.id}
+          renderItem={(loading && page === 0) ? () => <ArticleCardShimmer /> : renderArticleCard}
+          contentContainerStyle={styles.listContent}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoader}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : !hasMore && articles.length > 0 ? (
+              <View style={styles.endContainer}>
+                <View style={styles.endDivider} />
+                <Newspaper size={24} color={colors.textLight} style={{ opacity: 0.5 }} />
+                <Text style={styles.endText}>You've reached the end. 📝</Text>
+                <Text style={styles.endSubtext}>We keep adding latest articles for you.</Text>
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            !loading ? (
+              <View style={styles.emptyContainer}>
+                <BookOpen size={48} color={colors.textLight} />
+                <Text style={styles.emptyText}>
+                  {searchQuery ? `No matching articles found.` : "No articles available yet."}
+                </Text>
+              </View>
+            ) : null
+          }
+        />
 
         {/* Bottom Section - Task Page Style Filters/Search */}
         <KeyboardShiftView style={styles.bottomContainer}>
@@ -325,7 +327,7 @@ export default function ArticlesScreen() {
               </View>
             )}
 
-            <View style={styles.searchContainer}>
+            <View style={styles.searchContainer}> 
               <View style={styles.searchBar}>
                 <Search size={20} color={colors.textLight} />
                 <TextInput
@@ -423,28 +425,37 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  badgeDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: colors.border,
+    marginHorizontal: 2,
+  },
   tagBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: colors.primary + '10', // Light primary tint
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   tagBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.primary,
+    textTransform: 'uppercase',
   },
   readTimeBadge: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   readTimeText: {
-    color: '#FFF',
+    color: colors.textLight,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -503,7 +514,7 @@ const styles = StyleSheet.create({
   bottomContainer: {
     justifyContent: 'flex-end',
     width: '100%',
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
   },
   bottomBar: {
     borderTopWidth: 1,
@@ -520,7 +531,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     paddingHorizontal: spacing.md,
     height: 46,
     borderRadius: borderRadius.md,
@@ -538,7 +549,7 @@ const styles = StyleSheet.create({
     height: 46,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.borderLight,
@@ -569,7 +580,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.borderLight,
   },

@@ -8,13 +8,15 @@ import { BeatTagList } from '../../components/beats/BeatTagList';
 import { BeatCard } from '../../components/beats/BeatCard';
 import { ParticleBackground } from '../../components/beats/ParticleBackground';
 import { BeatCardShimmer } from '../../components/shimmers/BeatCardShimmer';
-
+import crashlytics from '@/lib/crashlytics';
 import { useRouter } from 'expo-router';
+import { useApp } from '../../contexts/AppContext';
 
 type SortOption = 'views' | 'duration';
 
 export default function BeatsScreen() {
     const router = useRouter();
+    const { showToast } = useApp();
     const [tags, setTags] = useState<BeatTag[]>([]);
     const [beats, setBeats] = useState<Beat[]>([]);
     const [loading, setLoading] = useState(true);
@@ -46,13 +48,15 @@ export default function BeatsScreen() {
             if (beatsData) {
                 setBeats(beatsData);
             }
-        } catch (error) {
-            console.error('Error fetching beats data:', error);
+        } catch (error:any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', 'Error fetching beats data:', error);
+            showToast("Failed to fetch latest beats. Please try again.", "error");
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [showToast]);
 
     useEffect(() => {
         fetchData();
@@ -94,11 +98,12 @@ export default function BeatsScreen() {
                 .eq('id', beatId);
 
             if (error) {
-                console.error("Failed to update play_count in database");
+                console.log('[ERROR]:', "Failed to update play_count in database");
                 // Optional: Revert optimistic state here if critically needed
             }
-        } catch (err) {
-            console.error(err);
+        } catch (err:any) {
+            crashlytics().recordError(err);
+            console.log('[ERROR]:', err);
         }
     };
 
@@ -124,18 +129,18 @@ export default function BeatsScreen() {
                     tags={tags}
                     selectedTag={selectedTag}
                     onSelect={setSelectedTag}
+                    loading={loading || refreshing}
                 />
             </View>
 
             {loading && !refreshing ? (
-                <View style={{ flex: 1, paddingTop: spacing.sm }}>
-                    <BeatCardShimmer />
-                    <BeatCardShimmer />
-                    <BeatCardShimmer />
-                    <BeatCardShimmer />
-                    <BeatCardShimmer />
-                    <BeatCardShimmer />
-                </View>
+                <FlatList
+                    data={[1, 2, 3, 4, 5, 6]}
+                    keyExtractor={(item) => item.toString()}
+                    renderItem={() => <BeatCardShimmer />}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                    showsVerticalScrollIndicator={false}
+                />
             ) : (
                 <FlatList
                     data={filteredBeats}

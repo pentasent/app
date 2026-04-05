@@ -3,6 +3,7 @@ import { Image as RNImage, View, Text, StyleSheet, TouchableOpacity, Dimensions,
 import { useRouter } from 'expo-router';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
+import crashlytics from '@/lib/crashlytics';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, withSequence, cancelAnimation } from 'react-native-reanimated';
 import { ArrowLeft, Play, Pause, Volume2, VolumeX, Clock, Music } from 'lucide-react-native';
 import { colors, spacing } from '../../constants/theme';
@@ -60,7 +61,8 @@ export default function MeditationScreen() {
                     .order('created_at', { ascending: false });
 
                 if (error) {
-                    console.error('Error fetching meditation sounds:', error);
+                    console.log('[ERROR]:', 'Error fetching meditation sounds:', error);
+                    crashlytics().recordError(error as any);
                     return;
                 }
 
@@ -75,7 +77,8 @@ export default function MeditationScreen() {
                     setSelectedSound(mappedSounds[0]);
                 }
             } catch (err) {
-                console.error('Unexpected error fetching sounds:', err);
+                console.log('[ERROR]:', 'Unexpected error fetching sounds:', err);
+                crashlytics().recordError(err as any);
             } finally {
                 setIsLoading(false);
             }
@@ -100,7 +103,8 @@ export default function MeditationScreen() {
                 .update({ play_count: (data?.play_count || 0) + 1 })
                 .eq('id', soundId);
         } catch (error) {
-            console.error('Error increasing play count', error);
+            console.log('[ERROR]:', 'Error increasing play count', error);
+            crashlytics().recordError(error as any);
         }
     };
 

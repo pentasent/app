@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, SafeAreaView, DeviceEventEmitter, TextInput, ScrollView, Platform } from 'react-native';
+import crashlytics from '@/lib/crashlytics';
 import { useRouter } from 'expo-router'; // Correct import
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
@@ -19,7 +20,7 @@ type FilterPriority = 'all' | 'high' | 'medium' | 'low';
 export default function TasksScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { addNotification } = useApp();
+  const { addNotification, showToast } = useApp();
   const [tasks, setTasks] = useState<UserTask[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -74,11 +75,13 @@ export default function TasksScreen() {
       setTasks(data || []);
 
     } catch (error) {
-      console.error('Error fetching tasks:', error);
+      console.log('[ERROR]:', 'Error fetching tasks:', error);
+      crashlytics().recordError(error as any);
+      showToast("Unable to load latest tasks.", "error");
     } finally {
       setLoading(false);
     }
-  }, [user, searchQuery, sortBy, filterPriority]);
+  }, [user, searchQuery, sortBy, filterPriority, showToast]);
 
   // Debounce Search
   useEffect(() => {
@@ -163,7 +166,9 @@ export default function TasksScreen() {
       DeviceEventEmitter.emit('task_update');
 
     } catch (error) {
-      console.error('Error toggling task:', error);
+      console.log('[ERROR]:', 'Error toggling task:', error);
+      crashlytics().recordError(error as any);
+      showToast("Failed to update task status.", "error");
       // Revert optimism if needed
       fetchTasks();
     }
@@ -264,6 +269,7 @@ export default function TasksScreen() {
         ) : (
           <FlatList
             data={tasks}
+            showsVerticalScrollIndicator={false}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             contentContainerStyle={styles.listContent}

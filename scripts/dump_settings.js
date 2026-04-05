@@ -4,7 +4,7 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Missing Supabase environment variables");
+    console.log('[ERROR]:', "Missing Supabase environment variables");
     process.exit(1);
 }
 
@@ -21,7 +21,7 @@ async function dumpSettings() {
         console.log("All Settings Found:");
         console.log(JSON.stringify(data, null, 2));
     } catch (e) {
-        console.error(e);
+        console.log('[ERROR]:', e);
     }
 }
 

@@ -2,6 +2,7 @@ import { CustomImage as Image } from '@/components/CustomImage';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, TextInput, ScrollView, Platform, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
+import crashlytics from '@/lib/crashlytics';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
 import { LayoutGrid, Search, Filter, X, ShoppingBag, Eye, ExternalLink } from 'lucide-react-native';
@@ -34,7 +35,8 @@ export default function ProductsScreen() {
                 if (error) throw error;
                 setCategories(data || []);
             } catch (error) {
-                console.error('Error fetching categories:', error);
+                console.log('[ERROR]:', 'Error fetching categories:', error);
+                crashlytics().recordError(error as any);
             }
         };
         fetchCategories();
@@ -74,7 +76,8 @@ export default function ProductsScreen() {
             setProducts(data || []);
 
         } catch (error) {
-            console.error('Error fetching products:', error);
+            console.log('[ERROR]:', 'Error fetching products:', error);
+            crashlytics().recordError(error as any);
         } finally {
             setLoading(false);
         }
@@ -102,7 +105,7 @@ export default function ProductsScreen() {
             if (supported) {
                 await Linking.openURL(url);
             } else {
-                console.error("Don't know how to open URI: " + url);
+                console.log('[ERROR]:', "Don't know how to open URI: " + url);
             }
 
             // Update in DB (fire and forget)
@@ -112,7 +115,8 @@ export default function ProductsScreen() {
                 .eq('id', product.id);
 
         } catch (error) {
-            console.error('Error handling product press:', error);
+            console.log('[ERROR]:', 'Error handling product press:', error);
+            crashlytics().recordError(error as any);
         }
     };
 

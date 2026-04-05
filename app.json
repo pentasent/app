@@ -2,21 +2,18 @@
   "expo": {
     "name": "Pentasent",
     "slug": "pentasent",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
-
     "icon": "./assets/images/icon.png",
-
     "scheme": "pentasent",
-
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFFBF7"
     },
-
     "android": {
       "package": "com.pentasent.app",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "INTERNET",
         "android.permission.RECORD_AUDIO",
@@ -40,33 +37,15 @@
               "scheme": "https",
               "host": "www.pentasent.com",
               "pathPrefix": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "pentasent.com",
-              "pathPrefix": "/post"
-            },
-            {
-              "scheme": "https",
-              "host": "pentasent.com",
-              "pathPrefix": "/chat"
-            },
-            {
-              "scheme": "https",
-              "host": "pentasent.com",
-              "pathPrefix": "/meditation"
-            },
-            {
-              "scheme": "https",
-              "host": "pentasent.com",
-              "pathPrefix": "/beats"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
-
     "ios": {
       "bundleIdentifier": "com.pentasent.app",
       "supportsTablet": true,
@@ -75,13 +54,14 @@
         "applinks:www.pentasent.com"
       ]
     },
-
     "plugins": [
       "expo-router",
       "expo-font",
       "expo-web-browser",
       "@react-native-community/datetimepicker",
       "expo-audio",
+      "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
       [
         "expo-splash-screen",
         {
@@ -91,7 +71,6 @@
         }
       ]
     ],
-
     "extra": {
       "router": {},
       "eas": {

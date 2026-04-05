@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, DeviceEventEmitter, Alert, Platform, KeyboardAvoidingView } from 'react-native';
+import crashlytics from '@/lib/crashlytics';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
@@ -11,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Toast } from '@/components/Toast';
 import { useApp } from '@/contexts/AppContext';
 import { trackEvent } from '@/lib/analytics/track';
+import { CustomTimePicker } from '@/components/CustomTimePicker';
 
 const MAX_TITLE_LENGTH = 50;
 const AVAILABLE_TAGS = ['Work', 'Personal', 'Health', 'Diet', 'Learning', 'Shopping', 'Home', 'Finance'];
@@ -60,7 +62,7 @@ export default function CreateTaskScreen() {
         setSubtasks([...subtasks, { title: newSubtaskTitle.trim(), description: newSubtaskDesc.trim() }]);
         setNewSubtaskTitle('');
         setNewSubtaskDesc('');
-        setShowSubtaskInput(false);
+        // setShowSubtaskInput(false); // Removed to keep input open as per user request
     };
 
     const removeSubtask = (index: number) => {
@@ -74,7 +76,7 @@ export default function CreateTaskScreen() {
         }
 
         if (!user) {
-            Alert.alert('Error', 'User not authenticated');
+            setToastMsg('User not authenticated');
             return;
         }
 
@@ -144,19 +146,18 @@ export default function CreateTaskScreen() {
             router.back();
 
         } catch (error) {
-            console.error('Error creating task:', error);
+            console.log('[ERROR]:', 'Error creating task:', error);
+            crashlytics().recordError(error as any);
             // @ts-ignore
-            Alert.alert('Error', `Failed to create task: ${error.message || 'Unknown error'}`);
+            setToastMsg(`Failed to create task: ${error.message || 'Unknown error'}`);
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const onDateChange = (event: any, selectedDate?: Date) => {
+    const onDateChange = (selectedDate: Date) => {
         setShowDatePicker(false);
-        if (selectedDate) {
-            setDueDate(selectedDate);
-        }
+        setDueDate(selectedDate);
     };
 
     return (
@@ -186,7 +187,10 @@ export default function CreateTaskScreen() {
                     behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
                     style={{ flex: 1 }}
                 >
-                    <ScrollView contentContainerStyle={styles.content}>
+                    <ScrollView 
+                        contentContainerStyle={styles.content}
+                        keyboardShouldPersistTaps="always"
+                    >
 
                         {/* Title Input */}
                         <View style={styles.inputGroup}>
@@ -276,14 +280,12 @@ export default function CreateTaskScreen() {
                                     {dueDate ? format(dueDate, 'p') : 'No Time Set'}
                                 </Text>
                             </TouchableOpacity>
-                            {showDatePicker && (
-                                <DateTimePicker
-                                    value={dueDate || new Date()}
-                                    mode="time"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                    onChange={onDateChange}
-                                />
-                            )}
+                            <CustomTimePicker
+                                visible={showDatePicker}
+                                initialDate={dueDate}
+                                onClose={() => setShowDatePicker(false)}
+                                onSelect={onDateChange}
+                            />
                         </View>
 
                         {/* Description - Moved Here */}

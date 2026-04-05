@@ -6,7 +6,7 @@ import { colors } from '../../constants/theme';
 import { Comment } from '../../types/database';
 import { parseContent } from '../../utils/content';
 import { CommentShimmer } from '../shimmers/CommentShimmer';
-import { formatNumber } from '@/utils/format';
+import { formatNumber, formatDate } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
 
 interface CommentSectionProps {
@@ -23,12 +23,43 @@ interface CommentSectionProps {
 
 export const CommentSection = ({ comments, isLoading, commentCount, onLikeComment, onReply, currentUserId, onOptions }: CommentSectionProps) => {
     const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
+    const [expandedText, setExpandedText] = useState<Record<string, boolean>>({});
 
     const toggleExpand = (commentId: string) => {
         setExpandedComments(prev => ({
             ...prev,
             [commentId]: !prev[commentId]
         }));
+    };
+
+    const toggleTextExpand = (commentId: string) => {
+        setExpandedText(prev => ({
+            ...prev,
+            [commentId]: !prev[commentId]
+        }));
+    };
+
+    const renderCommentText = (content: any, id: string) => {
+        const fullText = parseContent(content);
+        const words = fullText.split(/\s+/);
+        const isLong = words.length > 180;
+        const isExpanded = expandedText[id];
+        const displayedText = isLong && !isExpanded 
+            ? words.slice(0, 180).join(' ') + '...' 
+            : fullText;
+
+        return (
+            <View>
+                <Text style={styles.text}>{displayedText}</Text>
+                {isLong && (
+                    <TouchableOpacity onPress={() => toggleTextExpand(id)}>
+                        <Text style={styles.readMoreBtn}>
+                            {isExpanded ? 'Show less' : 'Read more'}
+                        </Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+        );
     };
 
     const renderComment = ({ item }: { item: Comment }) => (
@@ -39,15 +70,16 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
             />
             <View style={styles.commentContent}>
                 <View style={styles.commentHeader}>
-                    <Text style={styles.username}>{item.user?.name || item.user?.name || 'User'}</Text>
-                    <Text style={styles.time}>{new Date(item.created_at).toLocaleDateString()}</Text>
+                    <Text style={styles.username}>{item.user?.name || 'User'}</Text>
+                    <Text style={styles.time}>{formatDate(item.created_at)}</Text>
                     {currentUserId === item.user_id && onOptions && (
                         <TouchableOpacity onPress={() => onOptions(item)} style={{ marginLeft: 'auto', padding: 4 }}>
                             <MoreHorizontal size={16} color={colors.textMuted} />
                         </TouchableOpacity>
                     )}
                 </View>
-                <Text style={styles.text}>{parseContent(item.content)}</Text>
+                
+                {renderCommentText(item.content, item.id)}
 
                 <View style={styles.actions}>
                     <TouchableOpacity
@@ -77,8 +109,8 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
                     <View style={styles.repliesContainer}>
                         {(() => {
                             const allReplies = item.replies.filter(Boolean);
-                            const isExpanded = expandedComments[item.id];
-                            const visibleReplies = isExpanded ? allReplies : allReplies.slice(0, 2);
+                            const isExpandedRepies = expandedComments[item.id];
+                            const visibleReplies = isExpandedRepies ? allReplies : allReplies.slice(0, 2);
                             const hiddenCount = allReplies.length - visibleReplies.length;
 
                             return (
@@ -87,10 +119,7 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
                                         const isLast = index === array.length - 1;
                                         return (
                                             <View key={reply.id} style={styles.replyItemWrapper}>
-                                                {/* The continuous vertical drop line - hidden on the very last item below the curve */}
                                                 {!isLast && <View style={styles.threadLine} />}
-
-                                                {/* The curved branch to the specific avatar */}
                                                 <View style={styles.curvedLine} />
 
                                                 <View style={styles.replyItem}>
@@ -100,28 +129,39 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
                                                     />
                                                     <View style={{ flex: 1 }}>
                                                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                            <Text style={styles.username}>{reply.user?.name || reply.user?.name}</Text>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                                                                <Text
+                                                                    style={[styles.username, { flexShrink: 1 }]}
+                                                                    numberOfLines={1}
+                                                                    ellipsizeMode="tail"
+                                                                >
+                                                                    {reply.user?.name}
+                                                                </Text>
+                                                                <Text style={styles.time}>
+                                                                    {formatDate(reply.created_at)}
+                                                                </Text>
+                                                            </View>
                                                             {currentUserId === reply.user_id && onOptions && (
                                                                 <TouchableOpacity onPress={() => onOptions(reply)} style={{ padding: 4 }}>
                                                                     <MoreHorizontal size={14} color={colors.textMuted} />
                                                                 </TouchableOpacity>
                                                             )}
                                                         </View>
-                                                        <Text style={styles.text}>{parseContent(reply.content)}</Text>
+                                                        {renderCommentText(reply.content, reply.id)}
                                                     </View>
                                                 </View>
                                             </View>
                                         );
                                     })}
 
-                                    {!isExpanded && hiddenCount > 0 && (
+                                    {!isExpandedRepies && hiddenCount > 0 && (
                                         <View style={styles.loadMoreWrapper}>
                                             <TouchableOpacity onPress={() => toggleExpand(item.id)} style={styles.actionButton}>
                                                 <Text style={styles.loadMoreText}>Load more +{hiddenCount}</Text>
                                             </TouchableOpacity>
                                         </View>
                                     )}
-                                    {isExpanded && allReplies.length > 2 && (
+                                    {isExpandedRepies && allReplies.length > 2 && (
                                         <View style={styles.loadMoreWrapper}>
                                             <TouchableOpacity onPress={() => toggleExpand(item.id)} style={styles.actionButton}>
                                                 <Text style={styles.loadMoreText}>See less</Text>
@@ -231,18 +271,18 @@ const styles = StyleSheet.create({
     },
     repliesContainer: {
         marginTop: 12,
-        paddingLeft: 16, // Align exactly under the parent's avatar center (avatar width is 32, so center is 16)
-        marginLeft: -44, // Pull back left to offset the flex layout of commentContent which is to the right of the avatar (avatar 32 + margin 12)
+        paddingLeft: 16,
+        marginLeft: -44,
     },
     replyItemWrapper: {
         position: 'relative',
         marginBottom: 12,
-        paddingLeft: 24, // Space for the curved line
+        paddingLeft: 24,
     },
     threadLine: {
         position: 'absolute',
-        top: 20, // Start just after the curve ends 
-        bottom: -18, // Drop down to next item
+        top: 20,
+        bottom: -18,
         left: 0,
         width: 2,
         backgroundColor: colors.border,
@@ -250,11 +290,11 @@ const styles = StyleSheet.create({
     },
     curvedLine: {
         position: 'absolute',
-        top: -30,         // Start higher up, closer to the parent avatar
+        top: -30,
         left: 0,
-        width: 16,        // Horizontal reach of the curve to the child avatar
-        height: 50,       // Vertical drop
-        borderBottomLeftRadius: 16, // The curve
+        width: 16,
+        height: 50,
+        borderBottomLeftRadius: 16,
         borderLeftWidth: 2,
         borderBottomWidth: 2,
         borderColor: colors.border,
@@ -272,24 +312,19 @@ const styles = StyleSheet.create({
     },
     loadMoreWrapper: {
         position: 'relative',
-        paddingLeft: 24, // Matches replyItemWrapper
+        paddingLeft: 24,
         marginTop: 4,
-    },
-    threadLineTail: {
-        position: 'absolute',
-        top: -12, // Connects to the previous comment's threadLine drop
-        bottom: '50%', // Reaches exactly vertically to the center of the Load More button
-        left: 0,
-        width: 16,
-        borderBottomLeftRadius: 16,
-        borderLeftWidth: 2,
-        borderBottomWidth: 2,
-        borderColor: colors.border,
     },
     loadMoreText: {
         fontSize: 13,
         color: colors.primary,
         fontWeight: '600',
         marginLeft: 32,
+    },
+    readMoreBtn: {
+        fontSize: 12,
+        color: colors.primary,
+        fontWeight: '600',
+        marginTop: 4,
     }
 });

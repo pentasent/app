@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { CommunityCardShimmer } from '../../components/shimmers/CommunityCardShimmer';
 import { formatNumber } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
+import crashlytics from '@/lib/crashlytics';
 
 const { width } = Dimensions.get('window');
 
@@ -79,7 +80,8 @@ export default function CommunityListingScreen() {
             setSections(newSections);
 
         } catch (error) {
-            console.error('Error fetching communities:', error);
+            console.log('[ERROR]:', 'Error fetching communities:', error);
+            crashlytics().recordError(error as any);
         } finally {
             setLoading(false);
             setRefreshing(false);

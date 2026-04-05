@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, ActivityIndicator, SafeAreaView, DeviceEventEmitter } from 'react-native';
 import { useRouter } from 'expo-router';
+import crashlytics from '@/lib/crashlytics';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
 import { ArrowLeft, Plus, BookOpen, Calendar, ChevronRight, Home, LayoutGrid } from 'lucide-react-native';
@@ -69,7 +70,8 @@ export default function JournalScreen() {
             }
 
         } catch (error) {
-            console.error('Error fetching journals:', error);
+            console.log('[ERROR]:', 'Error fetching journals:', error);
+            crashlytics().recordError(error as any);
         } finally {
             setLoading(false);
             setLoadingMore(false);
@@ -168,6 +170,7 @@ export default function JournalScreen() {
             ) : (
                 <SectionList
                     sections={sections}
+                    showsVerticalScrollIndicator={false}
                     keyExtractor={(item) => item.id}
                     renderItem={renderItem}
                     renderSectionHeader={renderSectionHeader}

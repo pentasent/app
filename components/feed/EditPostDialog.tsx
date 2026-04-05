@@ -55,7 +55,7 @@ export const EditPostDialog = ({ visible, onClose, onSubmit, initialTitle, initi
         if (!result.canceled) {
             const asset = result.assets[0];
             if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
-                Alert.alert('File Size Limit', 'File should not be more than 10 MB.');
+                setToastMsg('File should not be more than 10 MB.');
                 return;
             }
             setImages([...images, asset.uri]);
@@ -74,8 +74,8 @@ export const EditPostDialog = ({ visible, onClose, onSubmit, initialTitle, initi
             await onSubmit(title, content, images);
             handleClose();
         } catch (error) {
-            Alert.alert('Error', 'Failed to update post. Please try again.');
-            console.error(error);
+            setToastMsg('Failed to update post. Please try again.');
+            console.log('[ERROR]:', error);
         } finally {
             setLoading(false);
         }

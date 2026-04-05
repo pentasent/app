@@ -13,6 +13,7 @@ import {
     Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import crashlytics from '@/lib/crashlytics';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
 import {
     ArrowLeft,
@@ -86,7 +87,8 @@ export default function FeedbackScreen() {
                 router.back();
             }, 2000);
         } catch (error: any) {
-            console.error("Feedback submission error:", error);
+            console.log('[ERROR]:', "Feedback submission error:", error);
+            crashlytics().recordError(error);
             setToastMsg(error.message || "Failed to send feedback. Please try again.");
         } finally {
             setIsSubmitting(false);

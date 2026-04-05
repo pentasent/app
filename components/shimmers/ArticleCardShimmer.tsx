@@ -29,13 +29,15 @@ export const ArticleCardShimmer = () => {
                 <View style={[styles.bannerImage, styles.placeholderBg]}>
                     <ImageIcon size={48} color={colors.textMuted} opacity={0.3} />
                 </View>
-                <View style={styles.overlayTop}>
-                    <View style={styles.tagBadgeShimmer} />
-                    <View style={styles.readTimeBadgeShimmer} />
-                </View>
             </View>
 
             <View style={styles.cardInfo}>
+                <View style={styles.badgeRowShimmer}>
+                    <View style={styles.tagBadgeShimmer} />
+                    <View style={styles.badgeDividerShimmer} />
+                    <View style={styles.readTimeBadgeShimmer} />
+                </View>
+
                 <View style={styles.titleShimmer} />
                 <View style={[styles.titleShimmer, { width: '60%', marginTop: 8 }]} />
                 
@@ -65,25 +67,27 @@ const styles = StyleSheet.create({
     placeholderBg: {
         backgroundColor: colors.borderLight,
     },
-    overlayTop: {
-        position: 'absolute',
-        top: spacing.md,
-        left: spacing.md,
-        right: spacing.md,
+    badgeRowShimmer: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
+        marginBottom: 12,
+        gap: 8,
+    },
+    badgeDividerShimmer: {
+        width: 1,
+        height: 10,
+        backgroundColor: colors.border,
     },
     tagBadgeShimmer: {
-        width: 80,
-        height: 24,
-        borderRadius: 8,
+        width: 60,
+        height: 14,
+        borderRadius: 4,
         backgroundColor: colors.border,
     },
     readTimeBadgeShimmer: {
-        width: 60,
-        height: 24,
-        borderRadius: 8,
+        width: 50,
+        height: 14,
+        borderRadius: 4,
         backgroundColor: colors.border,
     },
     cardInfo: {

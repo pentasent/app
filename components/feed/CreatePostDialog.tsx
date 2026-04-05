@@ -91,7 +91,7 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
             handleClose();
         } catch (error) {
             setToastMsg('Failed to create post. Please try again.');
-            console.error(error);
+            console.log('[ERROR]:', error);
         } finally {
             setLoading(false);
         }

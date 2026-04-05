@@ -58,7 +58,7 @@ export const ChatMembersModal: React.FC<ChatMembersModalProps> = ({ visible, onC
             const modSet = new Set(data?.map(m => m.user_id) || []);
             setModerators(modSet);
         } catch (error) {
-            console.error('Error fetching moderators:', error);
+            console.log('[ERROR]:', 'Error fetching moderators:', error);
         }
     };
 
@@ -74,7 +74,7 @@ export const ChatMembersModal: React.FC<ChatMembersModalProps> = ({ visible, onC
             if (error) throw error;
             setMembers(data || []);
         } catch (error) {
-            console.error('Error fetching members:', error);
+            console.log('[ERROR]:', 'Error fetching members:', error);
         } finally {
             setLoading(false);
         }

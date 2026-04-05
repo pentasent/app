@@ -12,6 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, CheckCircle, Circle, Camera } from 'lucide-react-native';
 import { useApp } from '../../contexts/AppContext';
+import { Toast } from '@/components/Toast';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
@@ -21,6 +22,8 @@ export default function RoutineDetailScreen() {
   const { routines, updateRoutineTask } = useApp();
   const [showUpload, setShowUpload] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
+
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const routine = routines.find((r) => r.id === id);
 
@@ -52,7 +55,7 @@ export default function RoutineDetailScreen() {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (permissionResult.granted === false) {
-      Alert.alert('Permission Required', 'Permission to access camera roll is required!');
+      setToastMsg('Permission to access camera roll is required!');
       return;
     }
 
@@ -66,7 +69,7 @@ export default function RoutineDetailScreen() {
     if (!result.canceled) {
       setTimeout(() => {
         setUploadComplete(true);
-        Alert.alert('Great Progress!', 'Keep going, your skin will thank you! This will be improved in the next update.');
+        setToastMsg('Great Progress! Keep going, your skin will thank you!');
       }, 1000);
     }
   };
@@ -84,6 +87,7 @@ export default function RoutineDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Toast message={toastMsg} onHide={() => setToastMsg(null)} type="success" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color={colors.text} strokeWidth={2} />

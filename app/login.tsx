@@ -1,17 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Platform,
   ScrollView,
-  Alert,
   Animated,
-  TouchableOpacity,
-  Modal,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Keyboard,
+  TouchableOpacity
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Eye, EyeOff, Mail, X, CheckCircle2 } from 'lucide-react-native';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
+import crashlytics from '@/lib/crashlytics';
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
@@ -53,6 +48,7 @@ export default function LoginScreen() {
       await login(email.toLowerCase().trim(), password);
     } catch (error: any) {
       const msg = error.message || 'An error occurred during login';
+      crashlytics().recordError(error);
       setErrorMsg(msg);
       if (msg.includes('Email not confirmed')) {
         router.push(`/verify-otp?email=${encodeURIComponent(email)}` as any);
@@ -63,7 +59,7 @@ export default function LoginScreen() {
   };
 
 
-  return (
+  return ( 
     <>
       <Toast message={errorMsg} onHide={() => setErrorMsg(null)} />
       <LinearGradient

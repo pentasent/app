@@ -11,9 +11,10 @@ import {
     Platform,
     Linking,
     Share,
-    TextInput,
     Alert,
-    Modal
+    Modal,
+    TextInput,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -41,10 +42,14 @@ import KeyboardShiftView from '@/components/KeyboardShiftView';
 import { ArticleCommentSection } from '@/components/articles/ArticleCommentSection';
 import { Article, ArticleTag, User, ArticleComment } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
-import { getImageUrl } from '@/utils/get-image-url';
 import { CustomImage as Image } from '@/components/CustomImage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { format } from 'date-fns';
+import { getImageUrl } from '@/utils/get-image-url';
+import { FlexibleCustomImage } from '@/components/FlexibleCustomImage';
+import { formatDate } from '@/utils/format';
+import { Toast } from '@/components/Toast';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
+import crashlytics from '@/lib/crashlytics';
 
 const { width } = Dimensions.get('window');
 
@@ -84,6 +89,8 @@ export default function ArticleDetailScreen() {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [commentToDeleteId, setCommentToDeleteId] = useState<string | null>(null);
     const [optionsTarget, setOptionsTarget] = useState<ArticleComment | null>(null);
+    const [toastMsg, setToastMsg] = useState<string | null>(null);
+    const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('info');
     
     // Helper to build recursive tree from flat comments
     const buildCommentTree = (flatComments: any[]): ArticleComment[] => {
@@ -152,11 +159,14 @@ export default function ArticleDetailScreen() {
                         await supabase.rpc('increment_article_view', { art_id: art.id });
                         // Update local state if needed
                         setArticle(prev => prev ? { ...prev, view_count: (prev.view_count || 0) + 1 } : null);
-                    } catch (e) {
-                         console.error("Error logging view:", e);
+                    } catch (e:any) {
+                        crashlytics().recordError(e);
+                         console.log('[ERROR]:', "Error logging view:", e);
                     }
                 })();
-            } catch (e) { }
+            } catch (e:any) {
+                crashlytics().recordError(e);
+             }
 
             let hasLiked = false;
             if (user) {
@@ -191,8 +201,9 @@ export default function ArticleDetailScreen() {
             } as ArticleFull;
 
             setArticle(formattedArticle);
-        } catch (error) {
-            console.error('Error fetching article:', error);
+        } catch (error:any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', 'Error fetching article:', error);
         } finally {
             setLoading(false);
         }
@@ -240,8 +251,9 @@ export default function ArticleDetailScreen() {
             } else {
                 setComments([]);
             }
-        } catch (err) {
-            console.error('Error fetching comments:', err);
+        } catch (err:any) {
+            crashlytics().recordError(err);
+            console.log('[ERROR]:', 'Error fetching comments:', err);
         } finally {
             setCommentsLoading(false);
         }
@@ -314,8 +326,10 @@ export default function ArticleDetailScreen() {
             
             setShowDeleteModal(false);
         } catch (err: any) {
-            console.error("Error deleting comment:", err);
-            Alert.alert("Deletion Failed", err.message || "Unable to delete comment. It might be referenced by replies or likes.");
+            crashlytics().recordError(err);
+            console.log('[ERROR]:', "Error deleting comment:", err);
+            setToastType('error');
+            setToastMsg("Unable to delete comment. It might be referenced by replies or likes.");
             if (article?.id) fetchComments(article.id);
         } finally {
             setIsDeletingComment(false);
@@ -349,8 +363,9 @@ export default function ArticleDetailScreen() {
             setComments(prev => updateInList(prev));
             setEditingComment(null);
             setEditingText('');
-        } catch (err) {
-            console.error("Error updating comment:", err);
+        } catch (err:any) {
+            crashlytics().recordError(err);
+            console.log('[ERROR]:', "Error updating comment:", err);
         } finally {
             setIsSubmittingComment(false);
         }
@@ -389,8 +404,9 @@ export default function ArticleDetailScreen() {
                     await supabase.from('article_comments').update({ like_count: newCount }).eq('id', comment.id);
                 }
             }
-        } catch (err) {
-            console.error("Error liking comment:", err);
+        } catch (err:any) {
+            crashlytics().recordError(err);
+            console.log('[ERROR]:', "Error liking comment:", err);
             // Revert optimistic update if error
             if (article?.id) fetchComments(article.id);
         }
@@ -479,8 +495,9 @@ export default function ArticleDetailScreen() {
             }
 
             setCommentText('');
-        } catch (err) {
-            console.error('Error submitting comment:', err);
+        } catch (err:any) {
+            crashlytics().recordError(err);
+            console.log('[ERROR]:', 'Error submitting comment:', err);
         } finally {
             setIsSubmittingComment(false);
         }
@@ -498,8 +515,9 @@ export default function ArticleDetailScreen() {
                 await supabase.from('article_likes').insert({ article_id: article.id, user_id: user.id });
                 setArticle(prev => prev ? { ...prev, user_has_liked: true, like_count: (prev.like_count || 0) + 1 } : null);
             }
-        } catch (err) {
-            console.error('Error liking article:', err);
+        } catch (err:any) {
+            crashlytics().recordError(err);
+            console.log('[ERROR]:', 'Error liking article:', err);
             // Revert optimistic update if error
             if (article?.id) fetchArticle();
         } finally {
@@ -516,24 +534,30 @@ export default function ArticleDetailScreen() {
                 message: `Check out this article on Pentasent: ${article.title}\n\nRead more at: ${shareUrl}`,
                 url: shareUrl, // Important for iOS as well
             });
-        } catch (error) {
-            console.error('Error sharing article:', error);
+        } catch (error:any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', 'Error sharing article:', error);
         }
     };
 
     const currentBanner = article?.banner_image || initialBanner as string;
 
-    if (!article) {
-        if (loading) {
-            return (
-                <SafeAreaView style={styles.container}>
-                    <ArticleDetailShimmer />
-                </SafeAreaView>
-            );
-        }
-        return null;
-    }
+    // Show shimmer if we don't have the full article content yet
+    const showContentShimmer = loading || (!article?.blocks || article?.blocks.length === 0);
 
+    // If fetch failed and we have no content at all (not even initial data)
+    if (!article && !loading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centered}>
+                    <Text style={styles.headerSubtitle}>Article not found.</Text>
+                    <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+                        <Text style={{ color: colors.primary }}>Go Back</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -577,7 +601,7 @@ export default function ArticleDetailScreen() {
                         <View style={styles.contentContainer}>
                             <Text style={styles.title}>{article?.title || initialTitle}</Text>
 
-                            {(loading && (!article?.blocks || article?.blocks.length === 0)) ? (
+                            {showContentShimmer ? (
                                 <ArticleDetailShimmer />
                             ) : article && (
                                 <>
@@ -592,7 +616,7 @@ export default function ArticleDetailScreen() {
                                         <View style={styles.metaItem}>
                                             <Calendar size={14} color={colors.textLight} />
                                             <Text style={styles.metaText}>
-                                                {article.published_at ? format(new Date(article.published_at), 'MMM d, yyyy') : 'Recent'}
+                                                {article.published_at ? formatDate(article.published_at) : 'Recent'}
                                             </Text>
                                         </View>
                                         <View style={styles.metaDivider} />
@@ -736,6 +760,16 @@ export default function ArticleDetailScreen() {
                     </Animated.ScrollView>
                 </SafeAreaView>
             </KeyboardShiftView>
+            <Toast message={toastMsg} onHide={() => setToastMsg(null)} type={toastType} />
+            <ConfirmationModal
+                visible={showDeleteModal}
+                title="Delete Comment"
+                message="Are you sure you want to delete this comment? This action cannot be undone."
+                confirmText="Delete"
+                isLoading={isDeletingComment}
+                onConfirm={handleDeleteComment}
+                onCancel={() => setShowDeleteModal(false)}
+            />
 
             {/* Options Modal - Same as post detail */}
             <Modal
@@ -840,7 +874,11 @@ function BlockRenderer({ block }: { block: any }) {
         case 'image':
             return (
                 <View style={styles.imageBlock}>
-                    <Image source={{ uri: getImageUrl(url) }} style={styles.blockImage} />
+                    <FlexibleCustomImage 
+                        source={{ uri: getImageUrl(url) }} 
+                        style={styles.blockImage} 
+                        resizeMode="cover"
+                    />
                     {caption && <Text style={styles.caption}>{caption}</Text>}
                 </View>
             );
@@ -946,7 +984,7 @@ const styles = StyleSheet.create({
     },
     bannerContainer: {
         width: '100%',
-        height: 250,
+        height: 200,
         position: 'relative',
     },
     banner: {
@@ -1015,6 +1053,15 @@ const styles = StyleSheet.create({
         backgroundColor: colors.borderLight,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    centered: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: colors.textLight,
     },
     headerTitles: {
         backgroundColor: 'rgba(0,0,0,0.4)',
@@ -1182,7 +1229,6 @@ const styles = StyleSheet.create({
     },
     blockImage: {
         width: '100%',
-        height: 200,
         borderRadius: 16,
         backgroundColor: colors.borderLight,
     },
@@ -1249,13 +1295,13 @@ const styles = StyleSheet.create({
         color: colors.textLight,
     },
     highlightBlock: {
-        backgroundColor: colors.primary,
+        backgroundColor: colors.websiteSubtitle,
         padding: 24,
         borderRadius: 16,
         marginVertical: 16,
     },
     highlightText: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '700',
         color: '#FFF',
         lineHeight: 28,

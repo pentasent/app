@@ -3,12 +3,9 @@ import {
   View,
   Text,
   StyleSheet,
-  Platform,
   ScrollView,
-  Alert,
   Animated,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,9 +18,10 @@ import { Toast } from '../components/Toast';
 import { colors, spacing, borderRadius, typography } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
 import { trackEvent } from '../lib/analytics/track';
+import crashlytics from '@/lib/crashlytics';
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
@@ -88,10 +86,10 @@ export default function RegisterScreen() {
     const initializeReferral = async () => {
       const urlRef = params.ref as string;
       if (urlRef) {
-        await AsyncStorage.setItem('referral_code', urlRef).catch(console.error);
+        await AsyncStorage.setItem('referral_code', urlRef).catch(e => console.log('[ERROR]:', e));
         setReferralCode(urlRef);
       } else {
-        const storedRef = await AsyncStorage.getItem('referral_code').catch(console.error);
+        const storedRef = await AsyncStorage.getItem('referral_code').catch(e => console.log('[ERROR]:', e));
         if (storedRef) {
           setReferralCode(storedRef);
         }
@@ -139,6 +137,7 @@ export default function RegisterScreen() {
 
     } catch (error: any) {
       setErrorMsg(error.message || 'Registration failed');
+      crashlytics().recordError(error);
     } finally {
       setLoading(false);
     }

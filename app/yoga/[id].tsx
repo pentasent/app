@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { formatNumber } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
 import { YogaDetailShimmer } from '@/components/shimmers/YogaDetailShimmer';
+import crashlytics from '@/lib/crashlytics';
 
 const { width } = Dimensions.get('window');
 
@@ -171,8 +172,9 @@ export default function YogaDetailScreen() {
 
 
 
-        } catch (error) {
-            console.error('Error fetching yoga details:', error);
+        } catch (error: any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', 'Error fetching yoga details:', error);
             router.back();
         } finally {
             setLoading(false);
@@ -184,7 +186,7 @@ export default function YogaDetailScreen() {
     }, [fetchData]);
 
     const handleOpenVideo = (url: string) => {
-        Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+        Linking.openURL(url).catch(err => console.log('[ERROR]:', "Couldn't load page", err));
     };
 
     if (loading) {

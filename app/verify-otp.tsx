@@ -18,6 +18,7 @@ import { colors, spacing, borderRadius, typography } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { trackEvent } from '../lib/analytics/track';
+import crashlytics from '@/lib/crashlytics';
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
@@ -101,6 +102,7 @@ export default function VerifyOtpScreen() {
             
 
         } catch (error: any) {
+            crashlytics().recordError(error);
             setErrorMsg(error.message || 'Verification failed. Invalid code.');
         } finally {
             setLoading(false);
@@ -123,6 +125,7 @@ export default function VerifyOtpScreen() {
             setTimer(120); // 2 minutes
             setErrorMsg("Sent! A new code has been sent to your email.");
         } catch (e: any) {
+            crashlytics().recordError(e);
             setErrorMsg(e.message || "Failed to resend code.");
         } finally {
             setResendLoading(false);

@@ -20,6 +20,7 @@ import { colors, spacing, borderRadius, typography } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AlertCircle, Eye, EyeOff } from 'lucide-react-native';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
+import crashlytics from '@/lib/crashlytics';
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
@@ -137,6 +138,7 @@ export default function ResetPasswordScreen() {
 
             setStage('verify');
         } catch (error: any) {
+            crashlytics().recordError(error);
             setErrorMsg(error.message || 'Failed to send reset code');
         } finally {
             setLoading(false);
@@ -165,6 +167,7 @@ export default function ResetPasswordScreen() {
             setIsResetVerified(true); // Mark as verified so _layout doesn't redirect early
             setStage('reset');
         } catch (error: any) {
+            crashlytics().recordError(error);
             setErrorMsg(error.message || 'Invalid or expired code');
         } finally {
             setLoading(false);
@@ -233,6 +236,7 @@ export default function ResetPasswordScreen() {
                 goNext();
             }, 500);
         } catch (error: any) {
+            crashlytics().recordError(error);
             setErrorMsg(error.message || 'Failed to update password');
         } finally {
             setLoading(false);

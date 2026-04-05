@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, DeviceEventEmitter, Alert, Platform, KeyboardAvoidingView, Modal } from 'react-native';
+import crashlytics from '@/lib/crashlytics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
-import { ArrowLeft, Trash2, Calendar, Clock, CheckCircle2, Circle, Save, Flag, Plus, X } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Calendar, Clock, CheckCircle2, Circle, Save, Flag, Plus, X, RotateCcw } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserTask } from '@/types/database';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -11,7 +12,9 @@ import { format, parseISO } from 'date-fns';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TaskDetailShimmer } from '@/components/shimmers/TaskDetailShimmer';
 import { Toast } from '@/components/Toast';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { useApp } from '@/contexts/AppContext';
+import { CustomTimePicker } from '@/components/CustomTimePicker';
 
 const MAX_TITLE_LENGTH = 50;
 const AVAILABLE_TAGS = ['Work', 'Personal', 'Health', 'Diet', 'Learning', 'Shopping', 'Home', 'Finance'];
@@ -43,6 +46,10 @@ export default function TaskDetailScreen() {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [toastMsg, setToastMsg] = useState<string | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteSubtaskTarget, setDeleteSubtaskTarget] = useState<string | null>(null);
+    const [isDeletingParams, setIsDeletingParams] = useState({ loading: false, title: '', message: '' });
+    const [showRepeatModal, setShowRepeatModal] = useState(false);
+    const [isRepeating, setIsRepeating] = useState(false);
 
     const isReadOnly = task?.is_completed ?? false;
 
@@ -74,8 +81,9 @@ export default function TaskDetailScreen() {
                 }
             }
         } catch (error) {
-            console.error('Error fetching task details:', error);
-            Alert.alert('Error', 'Could not load task details');
+            console.log('[ERROR]:', 'Error fetching task details:', error);
+            crashlytics().recordError(error as any);
+            setToastMsg('Could not load task details');
             router.back();
         } finally {
             setLoading(false);
@@ -94,7 +102,8 @@ export default function TaskDetailScreen() {
             if (error) throw error;
             setSubtasks(data || []);
         } catch (error) {
-            console.error('Error fetching subtasks:', error);
+            console.log('[ERROR]:', 'Error fetching subtasks:', error);
+            crashlytics().recordError(error as any);
         }
     };
 
@@ -158,8 +167,9 @@ export default function TaskDetailScreen() {
             DeviceEventEmitter.emit('task_update', { id: task.id, ...updates });
             router.back();
         } catch (error) {
-            console.error('Error updating task:', error);
-            Alert.alert('Error', 'Failed to update task');
+            console.log('[ERROR]:', 'Error updating task:', error);
+            crashlytics().recordError(error as any);
+            setToastMsg('Failed to update task');
         } finally {
             setIsSaving(false);
         }
@@ -202,7 +212,8 @@ export default function TaskDetailScreen() {
             setShowDeleteModal(false);
             router.back();
         } catch (error) {
-            console.error('Error deleting task:', error);
+            console.log('[ERROR]:', 'Error deleting task:', error);
+            crashlytics().recordError(error as any);
             setToastMsg('Failed to delete task');
             setIsDeleting(false); // Reset on error
             setShowDeleteModal(false);
@@ -249,7 +260,8 @@ export default function TaskDetailScreen() {
 
             return true;
         } catch (error) {
-            console.error('Error setting task completion:', error);
+            console.log('[ERROR]:', 'Error setting task completion:', error);
+            crashlytics().recordError(error as any);
             return false;
         }
     };
@@ -258,7 +270,7 @@ export default function TaskDetailScreen() {
         if (!task) return;
         // If it's already completed, we don't allow un-completing it based on user request
         if (task.is_completed) {
-            Alert.alert('Completed', 'This task is completed and cannot be edited.');
+            setToastMsg('This task is completed and cannot be edited.');
             return;
         }
 
@@ -278,12 +290,84 @@ export default function TaskDetailScreen() {
 
                 setSubtasks(prev => prev.map(st => ({ ...st, is_completed: true })));
             } catch (err) {
-                console.error('Error auto-completing subtasks', err);
+                console.log('[ERROR]:', 'Error auto-completing subtasks', err);
+                crashlytics().recordError(err as any);
             }
         }
     };
 
     // Subtask Handlers
+    const handleRepeatTask = async () => {
+        if (!task || !user || isRepeating) return;
+        
+        try {
+            setIsRepeating(true);
+            
+            // 1. Create a fresh main task based on current state
+            const { data: newMainTask, error: mainError } = await supabase
+                .from('user_tasks')
+                .insert([{
+                    user_id: user.id,
+                    title: title.trim(), // Use the current edit title
+                    description: description.trim() || null,
+                    priority,
+                    tags: selectedTags,
+                    due_date: dueDate ? dueDate.toISOString() : null,
+                    is_completed: false,
+                    is_active: true,
+                    sort_order: 0
+                }])
+                .select()
+                .single();
+
+            if (mainError) throw mainError;
+
+            // 2. Fetch current subtasks (active only)
+            const { data: currentSubtasks } = await supabase
+                .from('user_tasks')
+                .select('title, description')
+                .eq('parent_task_id', task.id)
+                .is('is_active', true);
+
+            if (currentSubtasks && currentSubtasks.length > 0) {
+                const newSubtasksPayload = currentSubtasks.map(st => ({
+                    user_id: user.id,
+                    parent_task_id: newMainTask.id,
+                    title: st.title,
+                    description: st.description || null,
+                    is_completed: false,
+                    is_active: true
+                }));
+
+                const { error: subError } = await supabase
+                    .from('user_tasks')
+                    .insert(newSubtasksPayload);
+                
+                if (subError) throw subError;
+            }
+
+            // Notify
+            setToastMsg('Task repeated successfully!');
+            await addNotification({
+                title: 'Task Repeated',
+                message: `Created a fresh copy of "${newMainTask.title}".`,
+                notification_type: 'task',
+                category: 'success'
+            });
+
+            DeviceEventEmitter.emit('task_update');
+            setShowRepeatModal(false);
+            router.back();
+
+        } catch (error) {
+            console.log('[ERROR]:', 'Repeat task error:', error);
+            crashlytics().recordError(error as any);
+            setToastMsg('Failed to repeat task');
+        } finally {
+            setIsRepeating(false);
+        }
+    };
+
     const addSubtask = async () => {
         if (isReadOnly) return;
         if (!newSubtaskTitle.trim() || !user) {
@@ -310,11 +394,12 @@ export default function TaskDetailScreen() {
                 setSubtasks([...subtasks, data]);
                 setNewSubtaskTitle('');
                 setNewSubtaskDesc('');
-                setShowSubtaskInput(false);
+                // setShowSubtaskInput(false);
             }
         } catch (error) {
-            console.error('Error adding subtask:', error);
-            Alert.alert('Error', 'Failed to add subtask');
+            console.log('[ERROR]:', 'Error adding subtask:', error);
+            crashlytics().recordError(error as any);
+            setToastMsg('Failed to add subtask');
         }
     };
 
@@ -357,38 +442,37 @@ export default function TaskDetailScreen() {
             }
 
         } catch (error) {
-            console.error('Error updating subtask:', error);
+            console.log('[ERROR]:', 'Error updating subtask:', error);
+            crashlytics().recordError(error as any);
         }
     };
 
-    const deleteSubtask = async (subtaskId: string) => {
-        Alert.alert('Delete Subtask', 'Confirm delete?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: async () => {
-                    try {
-                        const { error } = await supabase
-                            .from('user_tasks')
-                            .delete()
-                            .eq('id', subtaskId);
-
-                        if (error) throw error;
-                        setSubtasks(prev => prev.filter(st => st.id !== subtaskId));
-                    } catch (error) {
-                        console.error('Delete subtask error', error);
-                    }
-                }
-            }
-        ]);
+    const deleteSubtask = (subtaskId: string) => {
+        setDeleteSubtaskTarget(subtaskId);
     };
 
-    const onDateChange = (event: any, selectedDate?: Date) => {
+    const confirmDeleteSubtask = async () => {
+        if (!deleteSubtaskTarget) return;
+        try {
+            const { error } = await supabase
+                .from('user_tasks')
+                .delete()
+                .eq('id', deleteSubtaskTarget);
+
+            if (error) throw error;
+            setSubtasks(prev => prev.filter(st => st.id !== deleteSubtaskTarget));
+        } catch (error) {
+            console.log('[ERROR]:', 'Delete subtask error', error);
+            crashlytics().recordError(error as any);
+            setToastMsg('Failed to delete subtask');
+        } finally {
+            setDeleteSubtaskTarget(null);
+        }
+    };
+
+    const onDateChange = (selectedDate: Date) => {
         setShowDatePicker(false);
-        if (selectedDate) {
-            setDueDate(selectedDate);
-        }
+        setDueDate(selectedDate);
     };
 
     return (
@@ -398,28 +482,46 @@ export default function TaskDetailScreen() {
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
                         <ArrowLeft size={24} color={colors.text} />
+                        <Text style={styles.headerTitle}>Task</Text>
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Task</Text>
                     <View style={{ flexDirection: 'row' }}>
-                        <TouchableOpacity onPress={handleDelete} style={styles.iconButton}>
-                            <Trash2 size={22} color={colors.error} />
-                        </TouchableOpacity>
-                        {!isReadOnly && (
-                            <TouchableOpacity onPress={handleSave} disabled={isSaving} style={[styles.iconButton, { marginLeft: 8 }]}>
-                                {isSaving ? <ActivityIndicator size="small" color={colors.primary} /> : <Save size={24} color={colors.primary} />}
-                            </TouchableOpacity>
+                        {loading ? (
+                            <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
+                                <View style={styles.headerIconShimmer} />
+                                <View style={styles.headerIconShimmer} />
+                                <View style={styles.headerIconShimmer} />
+                                <View style={styles.headerIconShimmer} />
+                            </View>
+                        ) : (
+                            <>
+                                <TouchableOpacity onPress={handleDelete} style={styles.iconButton}>
+                                    <Trash2 size={22} color={colors.error} />
+                                </TouchableOpacity>
+                                {!isReadOnly && (
+                                    <TouchableOpacity onPress={handleSave} disabled={isSaving} style={[styles.iconButton, { marginLeft: 8 }]}>
+                                        {isSaving ? <ActivityIndicator size="small" color={colors.primary} /> : <Save size={24} color={colors.primary} />}
+                                    </TouchableOpacity>
+                                )}
+                                <TouchableOpacity
+                                    style={[styles.iconButton, { marginLeft: 8 }]}
+                                    onPress={toggleCompletion}
+                                    disabled={isReadOnly}
+                                >
+                                    {task?.is_completed ? (
+                                        <CheckCircle2 size={24} color={colors.success} />
+                                    ) : (
+                                        <Circle size={24} color={colors.primary} />
+                                    )}
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[styles.iconButton, { marginLeft: 8 }]}
+                                    onPress={() => setShowRepeatModal(true)}
+                                >
+                                    <RotateCcw size={22} color={colors.text} />
+                                </TouchableOpacity>
+                            </>
                         )}
-                        <TouchableOpacity
-                            style={[styles.iconButton, { marginLeft: 8 }, isReadOnly && { opacity: 0.8 }]}
-                            onPress={toggleCompletion}
-                            disabled={isReadOnly}
-                        >
-                            {task?.is_completed ? (
-                                <CheckCircle2 size={24} color={colors.success} />
-                            ) : (
-                                <Circle size={24} color={colors.primary} />
-                            )}
-                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -433,7 +535,7 @@ export default function TaskDetailScreen() {
                     >
                         <ScrollView
                             contentContainerStyle={[styles.content, { paddingBottom: 120 }]}
-                            keyboardShouldPersistTaps="handled"
+                            keyboardShouldPersistTaps="always"
                             showsVerticalScrollIndicator={false}
                         >
                             {/* Status Toggle */}
@@ -482,8 +584,7 @@ export default function TaskDetailScreen() {
                                                 priority === p && {
                                                     backgroundColor: p === 'high' ? colors.error + '20' : p === 'medium' ? colors.warning + '20' : colors.success + '20',
                                                     borderColor: p === 'high' ? colors.error : p === 'medium' ? colors.warning : colors.success
-                                                },
-                                                isReadOnly && { opacity: 0.6 }
+                                                }
                                             ]}
                                             onPress={() => !isReadOnly && setPriority(p)}
                                             disabled={isReadOnly}
@@ -518,8 +619,7 @@ export default function TaskDetailScreen() {
                                                 key={tag}
                                                 style={[
                                                     styles.tagChip,
-                                                    isSelected && styles.tagChipActive,
-                                                    isReadOnly && { opacity: 0.6 }
+                                                    isSelected && styles.tagChipActive
                                                 ]}
                                                 onPress={() => !isReadOnly && toggleTag(tag)}
                                                 disabled={isReadOnly}
@@ -547,14 +647,12 @@ export default function TaskDetailScreen() {
                                         {dueDate ? format(dueDate, 'p') : 'No Time Set'}
                                     </Text>
                                 </TouchableOpacity>
-                                {showDatePicker && (
-                                    <DateTimePicker
-                                        value={dueDate || new Date()}
-                                        mode="time"
-                                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                        onChange={onDateChange}
-                                    />
-                                )}
+                                <CustomTimePicker
+                                    visible={showDatePicker}
+                                    initialDate={dueDate}
+                                    onClose={() => setShowDatePicker(false)}
+                                    onSelect={onDateChange}
+                                />
                             </View>
 
                             {/* Description - Moved Here */}
@@ -584,7 +682,7 @@ export default function TaskDetailScreen() {
                                 </View>
 
                                 {subtasks.map((st, index) => (
-                                    <View key={st.id} style={[styles.subtaskItem, isReadOnly && { opacity: 0.8 }]}>
+                                    <View key={st.id} style={styles.subtaskItem}>
                                         <TouchableOpacity onPress={() => toggleSubtaskCompletion(st)} style={{ marginRight: 10 }} disabled={isReadOnly}>
                                             {st.is_completed ? <CheckCircle2 size={20} color={colors.success} /> : <Circle size={20} color={colors.textLight} />}
                                         </TouchableOpacity>
@@ -641,39 +739,35 @@ export default function TaskDetailScreen() {
                     </KeyboardAvoidingView>
                 )}
 
-                {/* Custom Delete Modal */}
-                <Modal
+                {/* Confirmation Modals */}
+                <ConfirmationModal
                     visible={showDeleteModal}
-                    transparent
-                    statusBarTranslucent
-                    animationType="fade"
-                    onRequestClose={() => setShowDeleteModal(false)}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalContent}>
-                            <Text style={styles.modalTitle}>Delete Task</Text>
-                            <Text style={styles.modalMessage}>Are you sure you want to delete this task?</Text>
-                            <View style={styles.modalActions}>
-                                <TouchableOpacity
-                                    style={styles.modalCancelBtn}
-                                    onPress={() => setShowDeleteModal(false)}
-                                    disabled={isDeleting}
-                                >
-                                    <Text style={styles.modalCancelText}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.modalDeleteBtn, isDeleting && { opacity: 0.7 }]}
-                                    onPress={confirmDelete}
-                                    disabled={isDeleting}
-                                >
-                                    <Text style={styles.modalDeleteText}>
-                                        {isDeleting ? 'Deleting...' : 'Delete'}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </View>
-                </Modal>
+                    title="Delete Task"
+                    message="Are you sure you want to delete this task?"
+                    confirmText="Delete"
+                    isLoading={isDeleting}
+                    onConfirm={confirmDelete}
+                    onCancel={() => setShowDeleteModal(false)}
+                />
+
+                <ConfirmationModal
+                    visible={showRepeatModal}
+                    title="Repeat Task"
+                    message="Are you sure you want to repeat this task? This will create a new fresh copy of it."
+                    confirmText="Repeat"
+                    isLoading={isRepeating}
+                    onConfirm={handleRepeatTask}
+                    onCancel={() => setShowRepeatModal(false)}
+                />
+
+                <ConfirmationModal
+                    visible={!!deleteSubtaskTarget}
+                    title="Delete Subtask"
+                    message="Are you sure you want to delete this subtask?"
+                    confirmText="Delete"
+                    onConfirm={confirmDeleteSubtask}
+                    onCancel={() => setDeleteSubtaskTarget(null)}
+                />
             </SafeAreaView>
         </>
     );
@@ -694,7 +788,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: spacing.lg,
+        paddingHorizontal: spacing.md,
         paddingTop: spacing.md,
         paddingBottom: spacing.sm,
         borderBottomWidth: 1,
@@ -703,11 +797,21 @@ const styles = StyleSheet.create({
     },
     iconButton: {
         padding: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
     headerTitle: {
         fontSize: 18,
         fontWeight: '600',
         color: colors.text,
+    },
+    headerIconShimmer: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: colors.borderLight,
+        marginLeft: 8,
     },
     content: {
         padding: spacing.lg,

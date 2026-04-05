@@ -13,6 +13,7 @@ import { useApp } from '../../contexts/AppContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
 import { Notification } from '../../types';
 import { Toast } from '../../components/Toast';
+import crashlytics from '@/lib/crashlytics';
 
 export default function NotificationsScreen() {
     const router = useRouter();
@@ -78,8 +79,9 @@ export default function NotificationsScreen() {
             await markAllNotificationsRead();
             setToastType('success');
             setToastMsg('All notifications marked as read');
-        } catch (error) {
-            console.error(error);
+        } catch (error:any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', error);
             setToastType('error');
             setToastMsg('Failed to mark all as read');
         } finally {

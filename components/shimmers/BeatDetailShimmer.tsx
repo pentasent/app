@@ -50,9 +50,6 @@ export const BeatDetailShimmer = () => {
                             <View style={styles.titleShimmer} />
                             <View style={styles.artistShimmer} />
                         </View>
-                        <View style={styles.iconButton}>
-                            <Heart size={24} color={colors.textMuted} />
-                        </View>
                     </View>
 
                     {/* Progress Bar */}
@@ -67,23 +64,23 @@ export const BeatDetailShimmer = () => {
                     {/* Controls */}
                     <View style={styles.controls}>
                         <View style={styles.controlButtonSmall}>
-                            <Repeat size={20} color={colors.textMuted} />
+                            <Repeat size={20} color={colors.border} />
                         </View>
 
                         <View style={styles.controlButtonMedium}>
-                            <RotateCcw size={28} color={colors.textMuted} />
+                            <RotateCcw size={28} color={colors.border} />
                         </View>
 
                         <View style={styles.playPauseButtonShimmer}>
-                            <Play size={32} color={colors.background} fill={colors.background} style={{ marginLeft: 4 }} />
+                            <Play size={32} color={colors.border} fill={colors.border} style={{ marginLeft: 4 }} />
                         </View>
 
                         <View style={styles.controlButtonMedium}>
-                            <RotateCw size={28} color={colors.textMuted} />
+                            <RotateCw size={28} color={colors.border} />
                         </View>
 
                         <View style={styles.controlButtonSmall}>
-                            <Info size={20} color={colors.textMuted} />
+                            <Info size={20} color={colors.border} />
                         </View>
                     </View>
                 </Animated.View>

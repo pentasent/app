@@ -6,23 +6,109 @@ import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { AppProvider } from '../contexts/AppContext';
+import { AppProvider, useApp } from '../contexts/AppContext';
 import { FeedProvider } from '../contexts/FeedContext';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, LogBox, Platform } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { colors } from '../constants/theme';
+import Constants from 'expo-constants';
 import { CustomSplashScreen } from '../components/CustomSplashScreen';
+import { NoInternetScreen } from '../components/NoInternetScreen';
+import { MaintenanceScreen } from '../components/MaintenanceScreen';
+import { UpdateModal } from '../components/UpdateModal';
+import { Toast } from '../components/Toast';
+import { supabase } from '../lib/supabase';
+import { isVersionLower } from '../utils/version';
 import { initMixpanel } from '../lib/analytics/mixpanel';
 import { identifyUser } from '../lib/analytics/identify';
 import { trackEvent } from '../lib/analytics/track';
 
+// Suppress Mixpanel native module warning in Expo Go
+LogBox.ignoreLogs(['MixpanelReactNative is not available']);
+
 function RootLayoutNav() {
   const { user, isAdmin, loading, isResetVerified } = useAuth();
+  const { toast, hideToast, showToast, isConnected } = useApp();
   const segments = useSegments();
   const router = useRouter();
-
+  
   // Deep linking pending state
   const url = Linking.useURL();
   const [pendingDeepLinkRoute, setPendingDeepLinkRoute] = useState<string | null>(null);
+
+  // Version Control State
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState('');
+  const [updateConfig, setUpdateConfig] = useState<any>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [isForcedUpdate, setIsForcedUpdate] = useState(false);
+
+  // Network Status State
+  const [showNoInternetPage, setShowNoInternetPage] = useState(false);
+
+  useEffect(() => {
+    checkAppConfig();
+  }, []);
+
+  const checkAppConfig = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('*')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.log('[ERROR]:', 'Error fetching app config:', error);
+        return;
+      }
+
+      if (data) {
+        // 1. Check Maintenance Mode
+        if (data.maintenance_mode) {
+          setIsMaintenanceMode(true);
+          setMaintenanceMessage(data.maintenance_message);
+          return;
+        }
+
+        // 2. Check Force Update
+        if (isVersionLower(appVersion, data.min_supported_version)) {
+          setUpdateConfig(data);
+          setIsForcedUpdate(true);
+          setShowUpdateModal(true);
+          return;
+        }
+
+        // 3. Check Optional Update
+        if (isVersionLower(appVersion, data.latest_version)) {
+          setUpdateConfig(data);
+          setIsForcedUpdate(data.force_update); // Allow remote toggle of forced vs optional
+          setShowUpdateModal(true);
+        }
+      }
+    } catch (err) {
+      console.log('[ERROR]:', 'Failed to check app config:', err);
+    }
+  };
+
+  const handleUpdate = () => {
+    const url = Platform.OS === 'android' ? updateConfig?.android_url : updateConfig?.ios_url;
+    if (url) {
+      Linking.openURL(url);
+    }
+  };
+
+  useEffect(() => {
+    if (isConnected === false) {
+      if (loading || !user || !user.is_onboarded) {
+        setShowNoInternetPage(true);
+      }
+    } else if (isConnected === true) {
+      setShowNoInternetPage(false);
+    }
+  }, [isConnected, loading, user]);
 
   // Parse incoming URLs
   useEffect(() => {
@@ -45,7 +131,7 @@ function RootLayoutNav() {
       // Capture referral code if present in query params
       const ref = parsed.queryParams?.ref as string;
       if (ref) {
-        AsyncStorage.setItem('referral_code', ref).catch(console.error);
+        AsyncStorage.setItem('referral_code', ref).catch(e => console.log('[ERROR]:', e));
       }
     }
   }, [url, user]);
@@ -77,7 +163,7 @@ function RootLayoutNav() {
     if (loading) return;
 
     const inAuthGroup = segments[0] === '(tabs)' || segments[0] === 'coming-soon';
-    const inProtectedRoute = ['chat', 'routine', 'notifications', 'post', 'profile', 'beats', 'community', 'meditation', 'journal', 'articles', 'tasks', 'yoga', 'products'].includes(segments[0]);
+    const inProtectedRoute = ['chat', 'routine', 'notifications', 'post', 'profile', 'beats', 'community', 'meditation', 'journal', 'articles', 'tasks', 'yoga', 'products', 'pulse'].includes(segments[0]);
     const isAuthRoute = ['login', 'register', 'verify-otp', 'reset-password'].includes(segments[0]);
 
 if (!user) {
@@ -136,37 +222,67 @@ if (!user) {
     );
   }
 
+  if (isMaintenanceMode) {
+    return <MaintenanceScreen message={maintenanceMessage} />;
+  }
+
+  if (showNoInternetPage) {
+    return (
+      <View style={{ flex: 1 }}>
+        <NoInternetScreen onRetry={() => NetInfo.fetch()} />
+      </View>
+    );
+  }
+
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
-      <Stack.Screen name="reset-password" />
-      <Stack.Screen name="verify-otp" />
-      <Stack.Screen name="setup-profile" />
-      <Stack.Screen name="onboarding-communities" />
-      <Stack.Screen name="coming-soon" />
-      <Stack.Screen name="(tabs)" />
-      {/* <Stack.Screen name="updates" /> */}
-      <Stack.Screen name="post/[id]" options={{ presentation: 'modal', headerShown: false }} />
-      <Stack.Screen name="profile/index" options={{ headerShown: false }} />
-      <Stack.Screen name="beats/[id]" options={{ headerShown: false, presentation: 'modal' }} />
-      <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="community/index" options={{ headerShown: false }} />
-      <Stack.Screen name="community/[id]" options={{ headerShown: false, animation: 'fade' }} />
-      <Stack.Screen name="community/members/[id]" options={{ headerShown: false, animation: 'fade' }} />
-      <Stack.Screen name="meditation/index" options={{ headerShown: false, animation: 'fade' }} />
-      <Stack.Screen name="journal/index" options={{ headerShown: false, animation: 'fade' }} />
-      <Stack.Screen name="journal/[id]" options={{ headerShown: false, animation: 'fade' }} />
-      <Stack.Screen name="tasks/index" options={{ headerShown: false }} />
-      <Stack.Screen name="tasks/create" options={{ headerShown: false }} />
-      <Stack.Screen name="tasks/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="yoga/index" options={{ headerShown: false }} />
-      <Stack.Screen name="yoga/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="products/index" options={{ headerShown: false }} />
-      <Stack.Screen name="articles/index" options={{ headerShown: false }} />
-      <Stack.Screen name="articles/[slug]" options={{ headerShown: false, animation: 'fade' }} />
-      <Stack.Screen name="+not-found" />
-    </Stack>
+    <>
+      <Toast 
+        message={toast.message} 
+        onHide={hideToast} 
+        type={toast.type}
+        duration={toast.duration}
+      />
+      <UpdateModal
+        visible={showUpdateModal}
+        isForced={isForcedUpdate}
+        latestVersion={updateConfig?.latest_version || ''}
+        message={updateConfig?.update_message || ''}
+        releaseNotes={updateConfig?.release_notes}
+        onUpdate={handleUpdate}
+        onDismiss={() => setShowUpdateModal(false)}
+      />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="reset-password" />
+        <Stack.Screen name="verify-otp" />
+        <Stack.Screen name="setup-profile" />
+        <Stack.Screen name="onboarding-communities" />
+        <Stack.Screen name="coming-soon" />
+        <Stack.Screen name="(tabs)" />
+        {/* <Stack.Screen name="updates" /> */}
+        <Stack.Screen name="post/[id]" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen name="profile/index" options={{ headerShown: false }} />
+        <Stack.Screen name="beats/[id]" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="community/index" options={{ headerShown: false }} />
+        <Stack.Screen name="community/[id]" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="community/members/[id]" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="meditation/index" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="journal/index" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="journal/[id]" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="tasks/index" options={{ headerShown: false }} />
+        <Stack.Screen name="tasks/create" options={{ headerShown: false }} />
+        <Stack.Screen name="tasks/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="yoga/index" options={{ headerShown: false }} />
+        <Stack.Screen name="yoga/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="products/index" options={{ headerShown: false }} />
+        <Stack.Screen name="articles/index" options={{ headerShown: false }} />
+        <Stack.Screen name="articles/[slug]" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="pulse/index" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="+not-found" />
+      </Stack>
+    </>
   );
 }
 

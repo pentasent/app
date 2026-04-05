@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   LayoutAnimation,
@@ -33,6 +32,8 @@ import KeyboardShiftView from '@/components/KeyboardShiftView';
 import { CommunityChatDetailShimmer } from '@/components/shimmers/CommunityChatDetailShimmer';
 import { formatNumber } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
+import crashlytics from '@/lib/crashlytics';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 type MessageWithUser = CommunityChatMessage & {
   user: User;
@@ -108,6 +109,8 @@ export default function ChatDetailScreen() {
   // Options Modal State
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<MessageWithUser | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeletingMessage, setIsDeletingMessage] = useState(false);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
@@ -154,7 +157,7 @@ export default function ChatDetailScreen() {
           console.log(`[Realtime Chat] Status for chat:${chatId}:`, status);
           lastStatus = status;
         }
-        if (err) console.error('[Realtime Chat] Subscription error:', err);
+        if (err) console.log('[ERROR]:', '[Realtime Chat] Subscription error:', err);
       });
 
     return () => {
@@ -233,8 +236,9 @@ export default function ChatDetailScreen() {
           });
         if (error) throw error;
       }
-    } catch (error) {
-      console.error('Error updating read receipt:', error);
+    } catch (error:any) {
+      crashlytics().recordError(error);
+      console.log('[ERROR]:', 'Error updating read receipt:', error);
     }
   };
 
@@ -248,8 +252,9 @@ export default function ChatDetailScreen() {
 
       if (error) throw error;
       setChat(data);
-    } catch (error) {
-      console.error('Error fetching chat details:', error);
+    } catch (error:any) {
+      crashlytics().recordError(error);
+      console.log('[ERROR]:', 'Error fetching chat details:', error);
     }
   };
 
@@ -264,7 +269,8 @@ export default function ChatDetailScreen() {
       if (error) throw error;
       setMemberCount(count || 0);
     } catch (error) {
-      console.error('Error fetching member count:', error);
+      console.log('[ERROR]:', 'Error fetching member count:', error);
+      crashlytics().recordError(error as any);
     }
   };
 
@@ -311,8 +317,9 @@ export default function ChatDetailScreen() {
       // Standard behavior: scroll to bottom, show toast "Unread messages".
       // Implementation: Scroll to bottom for now.
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
-    } catch (error) {
-      console.error('Error fetching messages:', error);
+    } catch (error:any) {
+      crashlytics().recordError(error);
+      console.log('[ERROR]:', 'Error fetching messages:', error);
     }
   };
 
@@ -520,8 +527,9 @@ export default function ChatDetailScreen() {
             } : m));
         }
       }
-    } catch (error) {
-      console.error('Error sending/updating message:', error);
+    } catch (error:any) {
+      crashlytics().recordError(error);
+      console.log('[ERROR]:', 'Error sending/updating message:', error);
       setToastType('error');
       setToastMsg('Failed to process message');
     }
@@ -581,14 +589,23 @@ export default function ChatDetailScreen() {
     setEditingMessage(null);
   };
 
-  const deleteMessage = async (messageId: string) => {
+  const deleteMessage = (messageId: string) => {
+    setOptionsModalVisible(false);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteMessage = async () => {
+    if (!selectedMessage || isDeletingMessage) return;
+    const messageId = selectedMessage.id;
     // Prevent deleting a message that hasn't been saved to DB yet (temp ID)
     if (typeof messageId === 'string' && messageId.startsWith('temp-')) {
-        setToastType('info');
-        setToastMsg('Message is in queue, please try again in a second.');
+      setToastType('info');
+      setToastMsg('Message is in queue, please try again in a second.');
+      setShowDeleteModal(false);
       return;
     }
 
+    setIsDeletingMessage(true);
     try {
       const { error } = await supabase
         .from('community_chat_messages')
@@ -597,9 +614,15 @@ export default function ChatDetailScreen() {
 
       if (error) throw error;
       setMessages(prev => prev.filter(m => m.id !== messageId));
-    } catch (error) {
-      console.error("Error deleting message:", error);
-      Alert.alert('Error', 'Failed to delete message');
+      setShowDeleteModal(false);
+    } catch (error: any) {
+      crashlytics().recordError(error);
+      console.log('[ERROR]:', "Error deleting message:", error);
+      setToastType('error');
+      setToastMsg('Failed to delete message');
+      setShowDeleteModal(false);
+    } finally {
+      setIsDeletingMessage(false);
     }
   };
 
@@ -770,6 +793,7 @@ export default function ChatDetailScreen() {
           <FlatList
             ref={flatListRef}
             data={messages}
+            showsVerticalScrollIndicator={false}
             renderItem={renderMessage}
             keyExtractor={(item, index) => item.id ?? item.tempId ?? `msg-${index}`}
             contentContainerStyle={styles.listContent}
@@ -789,6 +813,15 @@ export default function ChatDetailScreen() {
         )}
 
         {/* Input Area */}
+        <ConfirmationModal
+          visible={showDeleteModal}
+          title="Delete Message"
+          message="Are you sure you want to delete this message?"
+          confirmText="Delete"
+          isLoading={isDeletingMessage}
+          onConfirm={confirmDeleteMessage}
+          onCancel={() => setShowDeleteModal(false)}
+        />
         <View>
           {/* Context Bar (Replying/Editing) */}
           {(replyingTo || editingMessage) && (

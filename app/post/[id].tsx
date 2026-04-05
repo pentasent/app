@@ -1,5 +1,6 @@
 import { Toast } from '@/components/Toast';
 import { CustomImage as Image } from '@/components/CustomImage';
+import crashlytics from '@/lib/crashlytics';
 import { FlexibleCustomImage } from '@/components/FlexibleCustomImage';
 import {
   View,
@@ -11,7 +12,6 @@ import {
   Platform,
   SafeAreaView,
   Share,
-  Alert,
   TextInput,
   Modal,
   Dimensions,
@@ -41,12 +41,13 @@ import { EditPostDialog } from '../../components/feed/EditPostDialog';
 import { FeedPostShimmer } from '../../components/shimmers/FeedPostShimmer';
 import { CommentShimmer } from '../../components/shimmers/CommentShimmer';
 import { DotsLoader } from '../../components/DotsLoader';
-import { formatNumber } from '../../utils/format';
+import { formatNumber, formatDate } from '../../utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
 import { useFeed } from '../../contexts/FeedContext';
 import { Video, ResizeMode } from 'expo-av';
 import { uploadImage } from '../../utils/image-upload';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -79,6 +80,7 @@ export default function PostDetailScreen() {
     );
     return !cached;
   });
+  const [commentsLoading, setCommentsLoading] = useState(true);
   const [lastFetchedId, setLastFetchedId] = useState<string | null>(null);
 
   // Comment Input State
@@ -162,15 +164,20 @@ export default function PostDetailScreen() {
     );
     if (!cached) {
       setLoading(true);
-    } else if (!hasIncrementedView.current) {
-        // If we found it in cache, we should still ensure it's incremented locally
-        // at least once if not already done by index.tsx (though index.tsx does it).
-        // But more importantly, we want to make sure our local state has the right count.
-        hasIncrementedView.current = true;
-        // Don't call viewPost here because index.tsx already calls it before navigating.
-        // But we must ensure local state 'post' is initialized with that cached data.
-        if (!post) setPost(cached);
+    } else {
+      setLoading(false);
+      // Even if post is cached, comments might not be
+      if (!comments || comments.length === 0) {
+        setCommentsLoading(true);
+      }
     }
+    
+    if (!hasIncrementedView.current) {
+        hasIncrementedView.current = true;
+        if (!post && cached) setPost(cached);
+    }
+
+    setCommentsLoading(true);
 
     try {
       // Fetch Post
@@ -286,7 +293,8 @@ export default function PostDetailScreen() {
 
       setComments(formattedComments);
     } catch (error: any) {
-      console.error('Error fetching post details:', error);
+      console.log('[ERROR]:', 'Error fetching post details:', error);
+      crashlytics().recordError(error);
       if (error.code === 'PGRST200') {
         console.warn(
           'Relationship between posts and post_images not found, falling back to query without images.',
@@ -310,11 +318,13 @@ export default function PostDetailScreen() {
             setEditContent(parseContent(fallbackData.content));
           }
         } catch (fallbackErr) {
-          console.error('Fallback query failed:', fallbackErr);
+          console.log('[ERROR]:', 'Fallback query failed:', fallbackErr);
+          crashlytics().recordError(fallbackErr as any);
         }
       }
     } finally {
       setLoading(false);
+      setCommentsLoading(false);
     }
   };
 
@@ -417,8 +427,9 @@ export default function PostDetailScreen() {
         setReplyingTo(null);
       }
     } catch (error) {
-      console.error('Error adding/updating comment:', error);
-      Alert.alert('Error', 'Failed to send/update comment.');
+      console.log('[ERROR]:', 'Error adding/updating comment:', error);
+      crashlytics().recordError(error as any);
+      setToastMsg('Failed to send/update comment.');
     } finally {
       setSubmitting(false);
     }
@@ -483,7 +494,8 @@ export default function PostDetailScreen() {
         }
       }
     } catch (error) {
-      console.error('Like error', error);
+      console.log('[ERROR]:', 'Like error', error);
+      crashlytics().recordError(error as any);
       // Revert on error could be added here
     }
   };
@@ -554,7 +566,8 @@ export default function PostDetailScreen() {
           .eq('id', commentId);
       }
     } catch (error) {
-      console.error('Comment Like error', error);
+      console.log('[ERROR]:', 'Comment Like error', error);
+      crashlytics().recordError(error as any);
     }
   };
 
@@ -568,7 +581,8 @@ export default function PostDetailScreen() {
         url: postUrl,
       });
     } catch (error: any) {
-      Alert.alert(error.message);
+      crashlytics().recordError(error);
+      setToastMsg(error.message);
     }
   };
 
@@ -642,6 +656,7 @@ export default function PostDetailScreen() {
     } catch (e) {
       setToastType('error');
       setToastMsg(`Failed to delete ${deleteTarget.type}.`);
+      crashlytics().recordError(e as any);
       setIsDeleting(false);
       setShowDeleteModal(false);
     }
@@ -783,7 +798,8 @@ export default function PostDetailScreen() {
           setToastType('success');
           setToastMsg('Post updated successfully');
         } catch (backgroundError: any) {
-          console.error('Background Sync Error:', backgroundError);
+          console.log('[ERROR]:', 'Background Sync Error:', backgroundError);
+          crashlytics().recordError(backgroundError);
           setPost((current) =>
             current ? { ...current, is_uploading: false } : null,
           );
@@ -797,7 +813,7 @@ export default function PostDetailScreen() {
       // Return immediately to allow dialog closure
       return;
     } catch (e: any) {
-      console.error('Edit Initiation Error:', e);
+      console.log('[ERROR]:', 'Edit Initiation Error:', e);
       setToastType('error');
       setToastMsg('Failed to start update.');
     }
@@ -1016,6 +1032,7 @@ export default function PostDetailScreen() {
       <View style={{ flex: 1 }}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           {/* Post Content */}
@@ -1055,14 +1072,10 @@ export default function PostDetailScreen() {
                       {currentPost.community.name} •{' '}
                     </Text>
                   )}
-                  {/* <Text style={styles.time}>
-                    {new Date(currentPost.created_at).toLocaleDateString()}
-                    {currentPost.is_edited && ' • Edited'}
-                  </Text> */}
                   <Text style={styles.time}>
                     {currentPost.is_uploading
                       ? 'Just now'
-                      : new Date(currentPost.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      : formatDate(currentPost.created_at)}
                     {currentPost.is_edited && ' • Edited'}
                   </Text>
                 </View>
@@ -1184,7 +1197,7 @@ export default function PostDetailScreen() {
           {/* Comments */}
           <CommentSection
             comments={comments}
-            isLoading={loading}
+            isLoading={commentsLoading}
             commentCount={currentPost.comments_count}
             onLikeComment={handleLikeComment}
             onReply={(comment) => setReplyingTo(comment)}
@@ -1249,46 +1262,16 @@ export default function PostDetailScreen() {
         </KeyboardShiftView>
       </View>
 
-      {/* Custom Delete Modal */}
-      <Modal
+      {/* Confirmation Modals */}
+      <ConfirmationModal
         visible={showDeleteModal}
-        transparent
-        statusBarTranslucent
-        animationType="fade"
-        onRequestClose={() => setShowDeleteModal(false)}
-      >
-        <View style={styles.modalOverlayDelete}>
-          <View style={styles.modalContentDelete}>
-            <Text style={styles.modalTitleDelete}>
-              {deleteTarget?.type === 'post' ? 'Delete Post' : 'Delete Comment'}
-            </Text>
-            <Text style={styles.modalMessageDelete}>
-              Are you sure you want to delete this {deleteTarget?.type}?
-            </Text>
-            <View style={styles.modalActionsDelete}>
-              <TouchableOpacity
-                style={styles.modalCancelBtnDelete}
-                onPress={() => setShowDeleteModal(false)}
-                disabled={isDeleting}
-              >
-                <Text style={styles.modalCancelTextDelete}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalDeleteBtnConfirm,
-                  isDeleting && { opacity: 0.7 },
-                ]}
-                onPress={confirmDeletePost}
-                disabled={isDeleting}
-              >
-                <Text style={styles.modalDeleteTextConfirm}>
-                  {isDeleting ? 'Deleting...' : 'Delete'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        title={deleteTarget?.type === 'post' ? 'Delete Post' : 'Delete Comment'}
+        message={`Are you sure you want to delete this ${deleteTarget?.type}?`}
+        confirmText="Delete"
+        isLoading={isDeleting}
+        onConfirm={confirmDeletePost}
+        onCancel={() => setShowDeleteModal(false)}
+      />
     </SafeAreaView>
   );
 }

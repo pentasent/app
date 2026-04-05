@@ -12,6 +12,7 @@ import { Check, Users } from 'lucide-react-native';
 import { OnboardingCommunityShimmer } from '../components/shimmers/OnboardingCommunityShimmer';
 import { trackEvent } from '../lib/analytics/track';
 import { getImageUrl } from '@/utils/get-image-url';
+import crashlytics from '@/lib/crashlytics';
 
 export default function OnboardingCommunitiesScreen() {
     const { user, refreshUser } = useAuth();
@@ -109,7 +110,7 @@ export default function OnboardingCommunitiesScreen() {
                     is_active: true
                 }));
                 const { error: chatError } = await supabase.from('community_chat_members').insert(chatMemRows);
-                if (chatError) console.error("Chat error:", chatError);
+                if (chatError) console.log('[ERROR]:', "Chat error:", chatError);
             }
 
             // Create Joined Community Notifications
@@ -130,7 +131,7 @@ export default function OnboardingCommunitiesScreen() {
             ];
 
             const { error: notificationError } = await supabase.from('notifications').insert(notifications);
-            if (notificationError) console.error("Notification error:", notificationError);
+            if (notificationError) console.log('[ERROR]:', "Notification error:", notificationError);
 
             // Mark user as onboarded
             const { error: updateError } = await supabase.from('users').update({ is_onboarded: true }).eq('id', user.id);
@@ -142,7 +143,8 @@ export default function OnboardingCommunitiesScreen() {
             await refreshFeed();
             router.replace('/(tabs)');
         } catch (e: any) {
-            console.error('Join error:', e);
+            console.log('[ERROR]:', 'Join error:', e);
+            crashlytics().recordError(e);
             alert(e.message || 'Failed to join communities');
         } finally {
             setSaving(false);

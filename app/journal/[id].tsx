@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, DeviceEventEmitter, Modal } from 'react-native';
+import crashlytics from '@/lib/crashlytics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext'; // imports might vary based on your structure
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
@@ -71,7 +72,8 @@ export default function JournalEntryScreen() {
                 }
             }
         } catch (error) {
-            console.error(error);
+            console.log('[ERROR]:', error);
+            crashlytics().recordError(error as any);
             setToastType('error');
             setToastMsg('Failed to load journal.');
             router.back();
@@ -82,7 +84,7 @@ export default function JournalEntryScreen() {
 
     const handleSave = async () => {
         if (!user || !user.id) {
-            console.error('No authenticated user found!');
+            console.log('[ERROR]:', 'No authenticated user found!');
             setToastType('error');
             setToastMsg('You must be logged in to save a journal.');
             return;
@@ -170,7 +172,8 @@ export default function JournalEntryScreen() {
             }
 
         } catch (error) {
-            console.error(error);
+            console.log('[ERROR]:', error);
+            crashlytics().recordError(error as any);
             setToastType('error');
             setToastMsg('Failed to save journal.');
         } finally {
@@ -215,6 +218,7 @@ export default function JournalEntryScreen() {
             setShowDeleteModal(false);
             router.back();
         } catch (error) {
+            crashlytics().recordError(error as any);
             setToastType('error');
             setToastMsg('Failed to delete.');
             setIsDeleting(false);

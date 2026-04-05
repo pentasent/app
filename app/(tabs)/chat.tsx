@@ -20,6 +20,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ChatCardShimmer } from '../../components/shimmers/ChatCardShimmer';
 import { formatNumber } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
+import crashlytics from '@/lib/crashlytics';
 
 // Combined type for display
 type ChatItem = CommunityChat & {
@@ -142,8 +143,9 @@ export default function ChatListScreen() {
 
             setChats(sortedChats);
 
-        } catch (error) {
-            console.error('Error fetching chats:', error);
+        } catch (error:any) {
+            crashlytics().recordError(error);
+            console.log('[ERROR]:', 'Error fetching chats:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -227,7 +229,7 @@ export default function ChatListScreen() {
                     console.log('[Chat List Realtime] Status:', status);
                     lastStatus = status;
                 }
-                if (err) console.error('[Chat List Realtime] Error:', err);
+                if (err) console.log('[ERROR]:', '[Chat List Realtime] Error:', err);
             });
 
         return () => {
@@ -302,6 +304,7 @@ export default function ChatListScreen() {
             ) : (
                 <FlatList
                     data={chats}
+                    showsVerticalScrollIndicator={false}
                     keyExtractor={item => item.id}
                     renderItem={renderItem}
                     contentContainerStyle={styles.listContent}

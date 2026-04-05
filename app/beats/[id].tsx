@@ -13,6 +13,7 @@ import { Beat } from '../../types';
 import { BeatDetailShimmer } from '../../components/shimmers/BeatDetailShimmer';
 import { getImageUrl } from '@/utils/get-image-url';
 import { Animated, Easing } from 'react-native';
+import crashlytics from '@/lib/crashlytics';
 
 const PlayingAnimation = () => {
     const bars = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
@@ -117,8 +118,9 @@ export default function BeatsPlayerScreen() {
                 setBeat(data);
             }
             setLoading(false);
-        } catch (err) {
-            console.error('Error fetching beat:', err);
+        } catch (err:any) {
+            crashlytics().recordError(err);
+            console.log('[ERROR]:', 'Error fetching beat:', err);
             setError('Failed to load beat details');
             setLoading(false);
         }
