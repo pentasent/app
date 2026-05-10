@@ -11,6 +11,7 @@ import { CommunityMemberShimmer } from '@/components/shimmers/CommunityMemberShi
 import { getImageUrl } from '@/utils/get-image-url';
 import { Toast } from '@/components/Toast';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { formatDateWithYear } from '@/utils/format';
 
 type Member = {
     id: string; // Follower ID (not user ID directly in this context if we want to delete relation)
@@ -79,7 +80,7 @@ export default function CommunityMembersScreen() {
                 // Fetch Community Members
                 const { data: followersData, error: followersError } = await supabase
                     .from('community_followers')
-                    .select('user_id, user:users(id, name, avatar_url)')
+                    .select('user_id, followed_at, user:users(id, name, avatar_url)')
                     .eq('community_id', id);
 
                 if (followersError) throw followersError;
@@ -95,7 +96,7 @@ export default function CommunityMembersScreen() {
                 const formattedMembers = followersData.map((f: any) => ({
                     id: f.user_id,
                     user_id: f.user_id,
-                    joined_at: new Date().toISOString(), // Fallback
+                    joined_at: f.followed_at,
                     user: f.user,
                     is_moderator: modIds.has(f.user_id)
                 }));
@@ -251,7 +252,7 @@ export default function CommunityMembersScreen() {
                 />
                 <View style={styles.memberInfo}>
                     <Text style={styles.memberName}>{item.user.name} {isMe && "(You)"}</Text>
-                    <Text style={styles.memberDetail}>Joined {new Date(item.joined_at).toLocaleDateString()}</Text>
+                    <Text style={styles.memberDetail}>Joined {formatDateWithYear(item.joined_at)}</Text>
                 </View>
 
                 {item.is_moderator && (
@@ -272,7 +273,7 @@ export default function CommunityMembersScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" backgroundColor="transparent" translucent />
+            <StatusBar style="dark" />
             <Toast message={toastMsg} onHide={() => setToastMsg(null)} type={toastType} />
             <ConfirmationModal
                 visible={showRemoveModal}

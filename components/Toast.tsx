@@ -54,7 +54,8 @@ export const Toast: React.FC<ToastProps> = ({ message, onHide, duration = 5000, 
 
     if (!message) return null;
 
-    let bgColor = colors.error;
+    // let bgColor = colors.error;
+    let bgColor = colors.primary;
     let icon = <AlertCircle size={20} color={colors.surface} />;
 
     if (type === 'success') {

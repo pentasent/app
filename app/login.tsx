@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   Animated,
   TouchableOpacity
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -18,6 +18,7 @@ import { Image } from 'expo-image';
 import { Eye, EyeOff, Mail, X, CheckCircle2 } from 'lucide-react-native';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
 import crashlytics from '@/lib/crashlytics';
+import { trackEvent } from '../lib/analytics/track';
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
@@ -30,6 +31,25 @@ export default function LoginScreen() {
   
   const { login } = useAuth();
   const router = useRouter();
+  const isNavigating = React.useRef(false);
+
+  const safePush = (route: string) => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
+    // @ts-ignore
+    router.push(route);
+    setTimeout(() => {
+      isNavigating.current = false;
+    }, 500);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      setEmail('');
+      setPassword('');
+      setErrorMsg(null);
+    }, [])
+  );
 
   const isValidEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -46,13 +66,24 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email.toLowerCase().trim(), password);
+      trackEvent('user_login');
     } catch (error: any) {
-      const msg = error.message || 'An error occurred during login';
       crashlytics().recordError(error);
-      setErrorMsg(msg);
-      if (msg.includes('Email not confirmed')) {
-        router.push(`/verify-otp?email=${encodeURIComponent(email)}` as any);
+      
+      let msg = error.message || 'An error occurred during login';
+      
+      // Map technical Supabase errors to user-friendly messages
+      if (msg.includes('Invalid login credentials')) {
+        msg = 'Invalid email or password';
+      } else if (msg.includes('Email not confirmed')) {
+        router.push(`/verify-otp?email=${encodeURIComponent(email)}&type=signup` as any);
+        return;
+      } else if (msg.includes('User not found')) {
+        setEmail('');
+        setPassword('');
       }
+      
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
@@ -114,7 +145,7 @@ export default function LoginScreen() {
               />
 
               <TouchableOpacity 
-                onPress={() => router.push('/reset-password' as any)}
+                onPress={() => safePush('/reset-password')}
                 style={styles.forgotPasswordLink}
               >
                 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
@@ -136,7 +167,7 @@ export default function LoginScreen() {
 
               <Button
                 title="Create New Account"
-                onPress={() => router.push('/register')}
+                onPress={() => safePush('/register')}
                 variant="outline"
               />
             </View>

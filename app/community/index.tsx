@@ -1,6 +1,7 @@
 import { CustomImage as Image } from '@/components/CustomImage';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, SafeAreaView, Dimensions, RefreshControl, SectionList, DeviceEventEmitter } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
@@ -27,11 +28,12 @@ export default function CommunityListingScreen() {
     const [sections, setSections] = useState<{ title: string; data: ExtendedCommunity[] }[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const dataLoadedRef = useRef(false);
 
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (silent = false) => {
         if (!user) return;
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
 
             // Fetch all communities
             const { data: communities, error: communitiesError } = await supabase
@@ -78,6 +80,9 @@ export default function CommunityListingScreen() {
             }
 
             setSections(newSections);
+            dataLoadedRef.current = true;
+            // Cache the sections
+            await AsyncStorage.setItem(`communities_list_${user.id}`, JSON.stringify(newSections));
 
         } catch (error) {
             console.log('[ERROR]:', 'Error fetching communities:', error);
@@ -89,24 +94,47 @@ export default function CommunityListingScreen() {
     }, [user]);
 
     useEffect(() => {
-        fetchData();
+        const loadCache = async () => {
+            if (!user) return;
+            try {
+                const cached = await AsyncStorage.getItem(`communities_list_${user.id}`);
+                if (cached) {
+                    setSections(JSON.parse(cached));
+                    dataLoadedRef.current = true;
+                    setLoading(false);
+                    fetchData(true); // Silent refresh if we have cache
+                } else {
+                    fetchData(false); // Normal load if no cache
+                }
+            } catch (e) {
+                console.log('[ERROR]:', 'Error loading community list cache:', e);
+                fetchData(false);
+            }
+        };
+        loadCache();
 
         const subscription = DeviceEventEmitter.addListener('community_update', () => {
-            fetchData();
+            fetchData(true);
         });
 
         return () => {
             subscription.remove();
         };
-    }, [fetchData]);
+    }, [fetchData, user]);
 
     const onRefresh = () => {
         setRefreshing(true);
         fetchData();
     };
 
+    const isNavigating = useRef(false);
     const handleCommunityPress = (communityId: string) => {
+        if (isNavigating.current) return;
+        isNavigating.current = true;
         router.push(`/community/${communityId}`);
+        setTimeout(() => {
+            isNavigating.current = false;
+        }, 500);
     };
 
     const renderCommunityCard = ({ item }: { item: ExtendedCommunity }) => (
@@ -224,12 +252,12 @@ export default function CommunityListingScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
+            <ListHeader />
             <SectionList
                 sections={sections}
                 keyExtractor={(item) => item.id}
                 renderItem={renderCommunityCard}
                 renderSectionHeader={renderSectionHeader}
-                ListHeaderComponent={ListHeader}
                 contentContainerStyle={styles.listContent}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />

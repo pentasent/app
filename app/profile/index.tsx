@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
+  Image as RNImage,
 } from 'react-native';
 import {
   Mail,
@@ -19,6 +20,7 @@ import {
   ArrowLeft,
   Bell,
   MessageSquare,
+  Crown,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, supabase } from '../../contexts/AuthContext';
@@ -26,7 +28,7 @@ import Constants from 'expo-constants';
 import { colors, spacing, borderRadius } from '../../constants/theme';
 import LoggoutButton from '@/components/Loggout';
 import { EditProfileDialog } from '../../components/profile/EditProfileDialog';
-import { WavePattern } from '@/components/profile/WavePattern';
+import { ShootingStarsPattern } from '@/components/profile/ShootingStarsPattern';
 import { useRouter } from 'expo-router';
 import { formatNumber } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
@@ -45,7 +47,20 @@ export default function ProfileScreen() {
   const [journalCount, setJournalCount] = useState<number | null>(null);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [localUser, setLocalUser] = useState(user);
+  const [aspectRatio, setAspectRatio] = useState(2); // Default to wide banner
   const hasLoadedStats = React.useRef(false);
+  const isNavigating = React.useRef(false);
+
+  const safePush = (route: string) => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
+    // @ts-ignore
+    router.push(route);
+    setTimeout(() => {
+      isNavigating.current = false;
+    }, 500);
+  };
+
   const appVersion = Constants.expoConfig?.version || '1.0.0';
 
   useEffect(() => {
@@ -54,6 +69,16 @@ export default function ProfileScreen() {
       fetchStats();
       hasLoadedStats.current = true;
     }
+    
+    // Fetch image size for perfect full-width scaling
+    const imageUrl = `${process.env.EXPO_PUBLIC_STORAGE_BASE_URL}/avatars/placeholders/bird_sun.png`;
+    RNImage.getSize(imageUrl, (width, height) => {
+      if (width && height) {
+        setAspectRatio(width / height);
+      }
+    }, (error) => {
+      console.log('[ERROR] Failed to get image size:', error);
+    });
   }, [user]);
 
   const fetchStats = async () => {
@@ -83,7 +108,8 @@ export default function ProfileScreen() {
       const { count: jCount, error: jError } = await supabase
         .from('user_journals')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('is_active', true);
 
       if (!jError && jCount !== null) {
         setJournalCount(jCount);
@@ -94,12 +120,10 @@ export default function ProfileScreen() {
     }
   };
 
-  const onRefresh = useCallback(async () => {
+  const onRefresh = useCallback(async (silent = false) => {
     try {
-      setRefreshing(true);
+      if (!silent) setRefreshing(true);
       await fetchStats();
-      // Ideally we would also refresh AuthContext user here. 
-      // Since we don't have a direct 'refreshUser' exposed, we can fetch manually to update local view.
       if (user) {
         const { data, error } = await supabase.from('users').select('*').eq('id', user.id).single();
         if (error) throw error;
@@ -109,7 +133,7 @@ export default function ProfileScreen() {
       console.log('[ERROR]:', e);
       crashlytics().recordError(e as any);
     } finally {
-      setRefreshing(false);
+      if (!silent) setRefreshing(false);
     }
   }, [user]);
 
@@ -120,28 +144,42 @@ export default function ProfileScreen() {
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => onRefresh(false)} />}
       >
         {/* Banner with Gradient and Wave Pattern */}
         <View style={styles.bannerContainer}>
           <LinearGradient
-            colors={[colors.primaryLight, colors.background, colors.secondaryLight]}
+            colors={[colors.primary, colors.indigoLight, colors.secondary]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.banner}
           >
-            {/* <WavePattern width={width} height={160} style={styles.wavePattern} /> */}
-            <WavePattern
+            {/* Premium Background Texture to match Maya Card */}
+            <RNImage 
+              source={{ uri: `${process.env.EXPO_PUBLIC_STORAGE_BASE_URL}/avatars/maya/maya_background.jpg` }}
+              style={{ ...StyleSheet.absoluteFillObject, opacity: 0.1, zIndex: 0 }}
+              resizeMode="cover"
+            />
+
+
+
+            <ShootingStarsPattern
               width={width}
               height={160}
-              style={styles.wavePattern}
-              baseColor={colors.primary}
+              baseColor="#FFFFFF"
             />
 
             {/* Back Button */}
             <TouchableOpacity
               style={styles.backButtonBanner}
-              onPress={() => router.back()}
+              onPress={() => {
+                if (isNavigating.current) return;
+                isNavigating.current = true;
+                router.back();
+                setTimeout(() => {
+                  isNavigating.current = false;
+                }, 500);
+              }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <View style={styles.iconContainer}>
@@ -174,21 +212,15 @@ export default function ProfileScreen() {
             <View style={styles.headerInfo}>
               <Text style={styles.name}>{localUser?.name || 'User'}</Text>
 
-              <View style={styles.joinedRow}>
+              {/* <View style={styles.joinedRow}>
                 {localUser?.country && (
                   <View style={[styles.joinedRow]}>
                     <MapPin size={14} color={colors.textLight} />
                     <Text style={styles.joinedText}>{localUser.country} </Text>
                   </View>
                 )}
-                {/* <View style={[styles.joinedRow]}>
-                  <Calendar size={14} color={colors.textLight} />
-                  <Text style={styles.joinedText}>
-                    Joined {new Date(localUser?.created_at || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
-                  </Text>
-                </View> */}
 
-              </View>
+              </View> */}
             </View>
           </View>
 
@@ -229,6 +261,23 @@ export default function ProfileScreen() {
                 />
               ) : (
                 <Text style={styles.infoValueSimple}>{new Date(localUser?.created_at || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</Text>
+              )}
+            </View>
+
+            <View style={styles.rowDivider} />
+              <View style={styles.infoRow}>
+              <Text style={styles.infoLabelSimple}>Country</Text>
+              {!localUser?.country ? (
+                <View
+                  style={{
+                    width: 16,
+                    height: 16,
+                    backgroundColor: colors.border,
+                    borderRadius: borderRadius.full,
+                  }}
+                />
+              ) : (
+                <Text style={styles.infoValueSimple}>{localUser?.country || 'Not Set'}</Text>
               )}
             </View>
 
@@ -286,10 +335,23 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+
+          {/* Subscription Page Trigger */}
+          <TouchableOpacity
+            style={[styles.sectionContainer, styles.contactUsTrigger]}
+            onPress={() => safePush('/subscription/upgrade')}
+          >
+            <View style={styles.linkLeft}>
+              <Crown size={18} color="#F59E0B" />
+              <Text style={styles.linkText}>My Subscription</Text>
+            </View>
+            <ChevronRight size={18} color={colors.textLight} />
+          </TouchableOpacity>
+
           {/* Contact Us Page Trigger */}
           <TouchableOpacity
             style={[styles.sectionContainer, styles.contactUsTrigger]}
-            onPress={() => router.push('/profile/contact-us')}
+            onPress={() => safePush('/profile/contact-us')}
           >
             <View style={styles.linkLeft}>
               <Mail size={18} color={colors.primary} />
@@ -300,7 +362,7 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={[styles.sectionContainer, styles.contactUsTrigger]}
-            onPress={() => router.push('/profile/notification-settings')}
+            onPress={() => safePush('/profile/notification-settings')}
           >
             <View style={styles.linkLeft}>
               <Bell size={18} color={colors.secondary} />
@@ -311,7 +373,7 @@ export default function ProfileScreen() {
           
           <TouchableOpacity
             style={[styles.sectionContainer, styles.contactUsTrigger]}
-            onPress={() => router.push('/profile/feedback')}
+            onPress={() => safePush('/profile/feedback')}
           >
             <View style={styles.linkLeft}>
               <MessageSquare size={18} color={colors.primary} />
@@ -332,8 +394,14 @@ export default function ProfileScreen() {
             <Text style={styles.developerText}>Developed by Pentasent Inc.</Text>
             <Text style={styles.tagline}>Take Back Control of Your Mind and Senses</Text>
           </View>
-
         </View>
+        
+        {/* Decorative Bottom Illustration */}
+        {/* <RNImage 
+          source={{ uri: `${process.env.EXPO_PUBLIC_STORAGE_BASE_URL}/avatars/placeholders/bird_sun.png` }}
+          style={[styles.bottomIllustration, { aspectRatio }]}
+          resizeMode="contain"
+        /> */}
       </ScrollView>
 
       {/* Edit Component */}
@@ -341,7 +409,7 @@ export default function ProfileScreen() {
         visible={showEditProfile}
         onClose={() => setShowEditProfile(false)}
         currentUser={localUser}
-        onUpdate={onRefresh}
+        onUpdate={() => onRefresh(true)}
       />
     </View>
   );
@@ -426,20 +494,20 @@ const styles = StyleSheet.create({
   },
   headerInfo: {
     marginLeft: spacing.md,
-    marginBottom: 22, // Align with bottom of avatar approx
+    marginBottom: 18, // Align with bottom of avatar approx
     flex: 1,
     // gap: 4
   },
   name: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '500',
     color: colors.text,
   },
   joinedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
-    gap: 6,
+    // marginTop: 6,
+    // gap: 6,
   },
   joinedText: {
     fontSize: 13,
@@ -465,7 +533,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
     // shadowColor: colors.shadow,
@@ -577,5 +645,10 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '500',
     marginTop: 8,
+  },
+  bottomIllustration: {
+    width: '100%',
+    // marginTop: spacing.xl,
+    marginBottom: -140,
   },
 });

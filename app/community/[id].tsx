@@ -1,6 +1,7 @@
 import { CustomImage as Image } from '@/components/CustomImage';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView, Modal, DeviceEventEmitter, Animated } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
@@ -14,7 +15,7 @@ import { CommunityDetailShimmer } from '../../components/shimmers/CommunityDetai
 import { Toast } from '../../components/Toast';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { useApp } from '../../contexts/AppContext';
-import { formatNumber } from '@/utils/format';
+import { formatDateWithYear, formatNumber } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
 import crashlytics from '@/lib/crashlytics';
 
@@ -65,6 +66,8 @@ export default function CommunityDetailScreen() {
 
     // Fade animation for smooth header loading
     const headerFadeAnim = React.useRef(new Animated.Value(0)).current;
+    const isNavigating = useRef(false);
+    const dataLoadedRef = useRef(false);
 
     useEffect(() => {
         Animated.timing(headerFadeAnim, {
@@ -74,10 +77,10 @@ export default function CommunityDetailScreen() {
         }).start();
     }, [headerFadeAnim]);
 
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (silent = false) => {
         if (!user || !id) return;
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
 
             // Fetch Community Details
             const { data: communityData, error: communityError } = await supabase
@@ -130,14 +133,14 @@ export default function CommunityDetailScreen() {
             // Check Membership
             const { data: followData } = await supabase
                 .from('community_followers')
-                .select('user_id')
+                .select('user_id, followed_at')
                 .eq('community_id', id)
                 .eq('user_id', user.id)
                 .single();
 
             if (followData) {
                 setIsJoined(true);
-                setMemberSince(new Date().toISOString());
+                setMemberSince(new Date(followData.followed_at).toDateString());
             } else {
                 setIsJoined(false);
                 setMemberSince(null);
@@ -151,12 +154,12 @@ export default function CommunityDetailScreen() {
                 .eq('user_id', user.id)
                 .maybeSingle(); // Use maybeSingle to avoid error on no rows
 
-            console.log("Moderator Check:", {
-                communityId: id,
-                userId: user.id,
-                modData,
-                error: modCheckError
-            });
+            // console.log("Moderator Check:", {
+            //     communityId: id,
+            //     userId: user.id,
+            //     modData,
+            //     error: modCheckError
+            // });
 
             setIsModerator(!!modData);
 
@@ -166,39 +169,28 @@ export default function CommunityDetailScreen() {
                 .select('user:users(id, name, avatar_url, country), added_at')
                 .eq('community_id', id);
 
+            let currentModerators: any[] = [];
             if (modsList) {
-                // Fetch joined dates for moderators
-                const modUserIds = modsList.map((m: any) => m.user.id);
-                const { data: modFollowers } = await supabase
-                    .from('community_followers')
-                    .select('user_id, created_at')
-                    .eq('community_id', id)
-                    .in('user_id', modUserIds);
-
                 const formattedMods = modsList.map((m: any) => ({
                     user: m.user,
                     joined_at: m.added_at
                 }));
 
                 if (formattedMods.length > 0) {
-                    setModerators(formattedMods);
+                    currentModerators = formattedMods;
                 } else if (communityData.creator) {
-                    // Fallback to creator if no mods assigned
-                    setModerators([{
+                    currentModerators = [{
                         user: communityData.creator,
                         joined_at: communityData.created_at
-                    }]);
-                } else {
-                    setModerators([]);
+                    }];
                 }
             } else if (communityData.creator) {
-                setModerators([{
+                currentModerators = [{
                     user: communityData.creator,
                     joined_at: communityData.created_at
-                }]);
-            } else {
-                setModerators([]);
+                }];
             }
+            setModerators(currentModerators);
 
             // Fetch Stats (Posts Count)
             const { count: postsCount } = await supabase
@@ -207,20 +199,63 @@ export default function CommunityDetailScreen() {
                 .eq('community_id', id);
 
             setStats({ postsCount: postsCount || 0 });
+            dataLoadedRef.current = true;
 
-        } catch (error:any) {
+            // Cache the data
+            const cacheData = {
+                community: communityData,
+                channels: channelsWithStats,
+                isJoined: !!followData,
+                isModerator: !!modData,
+                memberSince: followData ? followData.followed_at : null,
+                moderators: currentModerators,
+                stats: { postsCount: postsCount || 0 },
+                timestamp: Date.now()
+            };
+            await AsyncStorage.setItem(`community_detail_${id}`, JSON.stringify(cacheData));
+
+        } catch (error: any) {
             crashlytics().recordError(error);
             console.log('[ERROR]:', 'Error fetching community details:', error);
-            setToastMsg('Failed to load community details.');
-            router.back();
+            setToastMsg('Failed to refresh community details.');
+            
+            // Only go back if we have absolutely no data (not even in cache)
+            if (!dataLoadedRef.current) {
+                router.back();
+            }
         } finally {
             setLoading(false);
         }
     }, [id, user]);
 
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        const loadCache = async () => {
+            if (!id || !user) return;
+            try {
+                const cached = await AsyncStorage.getItem(`community_detail_${id}`);
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    if (parsed.community) setCommunity(parsed.community);
+                    if (parsed.channels) setChannels(parsed.channels);
+                    setIsJoined(parsed.isJoined);
+                    setIsModerator(parsed.isModerator);
+                    if (parsed.memberSince) setMemberSince(new Date(parsed.memberSince).toDateString());
+                    if (parsed.moderators) setModerators(parsed.moderators);
+                    if (parsed.stats) setStats(parsed.stats);
+                    dataLoadedRef.current = true;
+                    setLoading(false);
+                    fetchData(true); // Silent refresh
+                } else {
+                    fetchData(false); // Initial load
+                }
+            } catch (e) {
+                console.log('[ERROR]:', 'Error loading community detail cache:', e);
+                fetchData(false);
+            }
+        };
+
+        loadCache();
+    }, [id, user, fetchData]);
 
     const handleRequestAdmin = () => {
         setToastType('info');
@@ -580,7 +615,8 @@ export default function CommunityDetailScreen() {
                                     </View>
                                     <View style={styles.infoItem}>
                                         <Text style={styles.infoLabel}>Created</Text>
-                                        <Text style={styles.infoValue}>{new Date(community.created_at).toLocaleDateString()}</Text>
+                                        <Text style={styles.infoValue}>{formatDateWithYear(community.created_at)}</Text>
+                                        {/* <Text style={styles.infoValue}>{new Date(community.created_at).toLocaleDateString()}</Text> */}
                                     </View>
                                 </View>
                             </>
@@ -598,7 +634,7 @@ export default function CommunityDetailScreen() {
         return (
             <View style={styles.container}>
                 <Toast message={toastMsg} onHide={() => setToastMsg(null)} type={toastType} />
-                <StatusBar style="dark" backgroundColor="transparent" translucent />
+                <StatusBar style="dark" />
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                     {renderHeaderInfo()}
                 </ScrollView>
@@ -611,7 +647,7 @@ export default function CommunityDetailScreen() {
     return (
         <View style={styles.container}>
             <Toast message={toastMsg} onHide={() => setToastMsg(null)} type={toastType} />
-            <StatusBar style="dark" backgroundColor="transparent" translucent />
+            <StatusBar style="dark" />
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {renderHeaderInfo()}
 
@@ -742,7 +778,14 @@ export default function CommunityDetailScreen() {
                                     {isJoined && (
                                         <TouchableOpacity
                                             style={styles.membersLink}
-                                            onPress={() => router.push(`/community/members/${community.id}`)}
+                                            onPress={() => {
+                                                if (isNavigating.current) return;
+                                                isNavigating.current = true;
+                                                router.push(`/community/members/${community.id}`);
+                                                setTimeout(() => {
+                                                    isNavigating.current = false;
+                                                }, 500);
+                                            }}
                                         >
                                             <Users size={20} color={colors.primary} />
                                             <Text style={styles.membersLinkText}>View All Members</Text>
@@ -771,7 +814,7 @@ export default function CommunityDetailScreen() {
 
                                     {memberSince && (
                                         <Text style={styles.memberSince}>
-                                            Member since {new Date(memberSince).toLocaleDateString()}
+                                            Member since {formatDateWithYear(memberSince)}
                                         </Text>
                                     )}
                                 </View>
@@ -954,6 +997,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
         paddingVertical: spacing.md,
+        marginBottom: spacing.lg
     },
     actionButtonText: {
         fontWeight: '600',

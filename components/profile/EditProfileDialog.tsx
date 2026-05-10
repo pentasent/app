@@ -8,9 +8,8 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase, useAuth } from '../../contexts/AuthContext';
+import { useApp } from '../../contexts/AppContext';
 import { User } from '../../types/database';
-import * as FileSystem from 'expo-file-system/legacy';
-import { decode } from 'base64-arraybuffer';
 import { COUNTRIES } from '@/lib/country';
 import { getImageUrl } from '@/utils/get-image-url';
 
@@ -20,19 +19,6 @@ interface EditProfileDialogProps {
     currentUser: User | null;
     onUpdate: () => void; // Trigger refresh in parent
 }
-
-// const COUNTRIES = [
-//     { label: 'United States', flag: '🇺🇸' },
-//     { label: 'United Kingdom', flag: '🇬🇧' },
-//     { label: 'India', flag: '🇮🇳' },
-//     { label: 'Canada', flag: '🇨🇦' },
-//     { label: 'Australia', flag: '🇦🇺' },
-//     { label: 'Germany', flag: '🇩🇪' },
-//     { label: 'France', flag: '🇫🇷' },
-//     { label: 'Japan', flag: '🇯🇵' },
-//     { label: 'Brazil', flag: '🇧🇷' },
-//     { label: 'South Africa', flag: '🇿🇦' },
-// ];
 
 export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: EditProfileDialogProps) => {
     const [name, setName] = useState('');
@@ -58,6 +44,8 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
     }, [visible, currentUser]);
 
     const handleClose = () => {
+        setToastMsg(null);
+        setLoading(false);
         onClose();
     };
 
@@ -80,6 +68,7 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
     };
 
     const { updateProfile } = useAuth();
+    const { showToast } = useApp();
 
     const handleSubmit = async () => {
         if (!currentUser) return;
@@ -105,12 +94,9 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
                 avatar_uri: avatarUrl === currentUser.avatar_url ? undefined : avatarUrl || undefined
             });
 
-            setToastMsg('Profile updated successfully.');
             onUpdate(); // Refresh stats in parent
-
-            setTimeout(() => {
-                onClose();
-            }, 1000);
+            showToast('Profile updated successfully.', 'success');
+            handleClose();
 
         } catch (error: any) {
             setToastMsg(error.message || 'Failed to update profile.');

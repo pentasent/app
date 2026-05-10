@@ -12,16 +12,15 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
-  LayoutAnimation,
   Linking,
   Animated,
-  Keyboard
+  Easing
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius } from '../../constants/theme';
-import { Send, ArrowLeft, MoreVertical, Edit2, Reply, X, Copy, Trash2 } from 'lucide-react-native';
+import { Send, ArrowLeft, MoreVertical, Edit2, Reply, X, Copy, Trash2, ChevronDown } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { CommunityChat, CommunityChatMessage, User } from '@/types/database';
 import { ChatMembersModal } from '@/components/chat/ChatMembersModal';
@@ -34,6 +33,7 @@ import { formatNumber } from '@/utils/format';
 import { getImageUrl } from '@/utils/get-image-url';
 import crashlytics from '@/lib/crashlytics';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type MessageWithUser = CommunityChatMessage & {
   user: User;
@@ -93,8 +93,9 @@ const renderTextWithLinks = (text: string, style: any, isMe: boolean, router: an
 
 export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams();
+  const chatId = Array.isArray(id) ? id[0] : (id as string);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isRealtimeReady } = useAuth();
   const [chat, setChat] = useState<CommunityChat | null>(null);
   const [messages, setMessages] = useState<MessageWithUser[]>([]);
   const [inputText, setInputText] = useState('');
@@ -118,27 +119,73 @@ export default function ChatDetailScreen() {
   // Highlighting State
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const blinkAnim = useRef(new Animated.Value(0)).current;
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const scrollToBottomAnim = useRef(new Animated.Value(0)).current;
+  const isScrollingToBottom = useRef(false);
 
   const flatListRef = useRef<FlatList>(null);
   const userCache = useRef<Map<string, User>>(new Map());
-  const chatId = Array.isArray(id) ? id[0] : id;
-
+  
   const handleRealtimeUpdateRef = useRef<any>(null);
   useEffect(() => {
     handleRealtimeUpdateRef.current = handleRealtimeUpdate;
   });
 
+  const MESSAGES_PER_PAGE = 30;
+  const [hasMore, setHasMore] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+
   useEffect(() => {
     if (!chatId) return;
 
-    fetchChatDetails();
-    fetchMemberCount();
-    initializeChat();
+    // Start everything in parallel for maximum speed
+    const init = async () => {
+        // 1. Try to get community info from cache first for instant header display
+        loadCommunityFromCache();
+        
+        // 2. Fire all network requests concurrently
+        await Promise.all([
+            fetchChatDetails(),
+            fetchMemberCount(),
+            initializeChat()
+        ]);
+    };
 
-    // Subscription for real-time updates
+    init();
+  }, [chatId]);
+
+  const loadCommunityFromCache = async () => {
+    if (!user || chat) return;
+    try {
+        const cached = await AsyncStorage.getItem(`chats_${user.id}`);
+        if (cached) {
+            const parsed = JSON.parse(cached);
+            const cachedChat = parsed.find((c: any) => c.id === chatId);
+            if (cachedChat) {
+                setChat(cachedChat);
+                // If we have cached community info, we can potentially hide the top-level loading
+                // but we still want to show a loading state for messages if they aren't here yet.
+            }
+        }
+    } catch (e) {
+        console.log('[Chat Detail Cache] Error:', e);
+    }
+  };
+
+  // Real-time subscription
+  useEffect(() => {
+    if (!user || !chatId || !isRealtimeReady) return;
+
+    // console.log(`[Realtime Chat] User and Realtime ready. Subscribing to chat:${chatId}`);
     let lastStatus: string | null = null;
+    const channelId = `chat:${chatId}:${Date.now()}`;
     const subscription = supabase
-      .channel(`chat:${chatId}`)
+      .channel(channelId, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: user.id }
+        }
+      })
       .on(
         'postgres_changes',
         {
@@ -148,67 +195,48 @@ export default function ChatDetailScreen() {
           filter: `chat_id=eq.${chatId}`,
         },
         (payload) => {
-          console.log('[Realtime Chat] Received payload:', payload);
+          // console.log('[Realtime Chat] Received payload:', payload);
           handleRealtimeUpdateRef.current(payload);
         }
       )
       .subscribe((status, err) => {
         if (status !== lastStatus) {
-          console.log(`[Realtime Chat] Status for chat:${chatId}:`, status);
+          // console.log(`[Realtime Chat] Status for chat:${chatId}:`, status);
           lastStatus = status;
         }
-        if (err) console.log('[ERROR]:', '[Realtime Chat] Subscription error:', err);
+        if (err) console.error('[Realtime Chat] Subscription error:', err);
       });
 
     return () => {
+      // console.log(`[Realtime Chat] Cleaning up: chat:${chatId}`);
       supabase.removeChannel(subscription);
-      updateLastRead(); // Update read receipt on exit
+      updateLastRead();
     };
-  }, [chatId]);
+  }, [chatId, user?.id, isRealtimeReady]);
 
   // Handle Blink Effect
   useEffect(() => {
     if (highlightedId) {
       Animated.sequence([
-        Animated.timing(blinkAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: false,
-        }),
-        Animated.timing(blinkAnim, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: false,
-        })
+          Animated.timing(blinkAnim, { toValue: 1, duration: 300, useNativeDriver: false }),
+          Animated.timing(blinkAnim, { toValue: 0, duration: 1000, useNativeDriver: false })
       ]).start(() => setHighlightedId(null));
     }
   }, [highlightedId]);
 
-  const initializeChat = async () => {
-    setLoading(true);
-    // 1. Get last read time from new table
-    const { data: readStatus } = await supabase
-      .from('community_chat_read_status')
-      .select('last_read_at')
-      .eq('chat_id', chatId)
-      .eq('user_id', user?.id)
-      .single();
-
-    const readAt = readStatus?.last_read_at || null;
-    setLastReadAt(readAt);
-
-    // 2. Fetch messages
-    await fetchMessages(readAt);
-    setLoading(false);
-
-    // 3. Update read time to now (after initial load)
-    updateLastRead();
-  };
+  // Scroll to Bottom Button Animation
+  useEffect(() => {
+    Animated.timing(scrollToBottomAnim, {
+      toValue: showScrollToBottom ? 1 : 0,
+      duration: 250,
+      useNativeDriver: true,
+      easing: Easing.bezier(0.4, 0, 0.2, 1)
+    }).start();
+  }, [showScrollToBottom]);
 
   const updateLastRead = async () => {
     if (!user) return;
     try {
-      // Manual "upsert" to avoid constraint requirement (42P10)
       const { data: existing } = await supabase
         .from('community_chat_read_status')
         .select('id')
@@ -217,16 +245,15 @@ export default function ChatDetailScreen() {
         .maybeSingle();
 
       if (existing) {
-        const { error } = await supabase
+        await supabase
           .from('community_chat_read_status')
           .update({
             last_read_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
           .eq('id', existing.id);
-        if (error) throw error;
       } else {
-        const { error } = await supabase
+        await supabase
           .from('community_chat_read_status')
           .insert({
             chat_id: chatId,
@@ -234,10 +261,8 @@ export default function ChatDetailScreen() {
             last_read_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
-        if (error) throw error;
       }
-    } catch (error:any) {
-      crashlytics().recordError(error);
+    } catch (error: any) {
       console.log('[ERROR]:', 'Error updating read receipt:', error);
     }
   };
@@ -249,78 +274,137 @@ export default function ChatDetailScreen() {
         .select('*, community:communities(*)')
         .eq('id', chatId)
         .single();
-
       if (error) throw error;
       setChat(data);
-    } catch (error:any) {
-      crashlytics().recordError(error);
+    } catch (error: any) {
       console.log('[ERROR]:', 'Error fetching chat details:', error);
     }
   };
 
   const fetchMemberCount = async () => {
     try {
-      const { count, error } = await supabase
+      const { count } = await supabase
         .from('community_chat_members')
         .select('*', { count: 'exact', head: true })
         .eq('chat_id', chatId)
         .eq('is_active', true);
-
-      if (error) throw error;
       setMemberCount(count || 0);
     } catch (error) {
       console.log('[ERROR]:', 'Error fetching member count:', error);
-      crashlytics().recordError(error as any);
     }
   };
 
-  const fetchMessages = async (readAt: string | null) => {
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  const fetchMessages = async (beforeId: string | null = null, readAt: string | null = null) => {
+    if (beforeId && (isFetchingMore || !hasMore)) return;
+    
+    if (beforeId) setIsFetchingMore(true);
+
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('community_chat_messages')
         .select(`
-                    *,
-                    user:users(*),
-                    parent_message:community_chat_messages!parent_message_id(
-                        id,
-                        message_text,
-                        user:users(name)
-                    )
-                `)
+            *,
+            user:users(*),
+            parent_message:community_chat_messages!parent_message_id(
+                id,
+                message_text,
+                user:users(name)
+            )
+        `)
         .eq('chat_id', chatId)
         .is('is_deleted', false)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(MESSAGES_PER_PAGE);
 
+      if (beforeId) {
+        const beforeMsg = messages.find(m => m.id === beforeId);
+        if (beforeMsg) {
+          query = query.lt('created_at', beforeMsg.created_at);
+        }
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
 
       const msgs = data || [];
-      if (readAt) {
-        // Find first message AFTER readAt
-        const firstUnread = msgs.find(m => new Date(m.created_at) > new Date(readAt));
+      if (msgs.length < MESSAGES_PER_PAGE) {
+        setHasMore(false);
+      }
+
+      if (!beforeId && (readAt || lastReadAt)) {
+        const checkReadAt = readAt || lastReadAt;
+        const firstUnread = [...msgs].reverse().find(m => new Date(m.created_at) > new Date(checkReadAt!));
         if (firstUnread) {
           setUnreadSeparatorId(firstUnread.id);
         }
-      } else if (msgs.length > 0) {
-        // If never read, maybe mark all as unread? Or just start fresh.
-        // For now, let's not show separator if never read to avoid clutter on first join.
       }
 
-      setMessages(msgs);
+      setMessages(prev => beforeId ? [...prev, ...msgs] : msgs);
 
       msgs.forEach(msg => {
-        if (msg.user) {
-          userCache.current.set(msg.user.id, msg.user);
-        }
+        if (msg.user) userCache.current.set(msg.user.id, msg.user);
       });
-
-      // Scroll logic: if unread found, maybe scroll to it? 
-      // Standard behavior: scroll to bottom, show toast "Unread messages".
-      // Implementation: Scroll to bottom for now.
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
-    } catch (error:any) {
-      crashlytics().recordError(error);
+    } catch (error: any) {
       console.log('[ERROR]:', 'Error fetching messages:', error);
+    } finally {
+      if (beforeId) setIsFetchingMore(false);
+      if (!beforeId) setIsInitialLoading(false);
     }
+  };
+
+  const loadMoreMessages = () => {
+    if (!isInitialLoading && !isFetchingMore && hasMore && messages.length >= MESSAGES_PER_PAGE) {
+        fetchMessages(messages[messages.length - 1].id);
+    }
+  };
+
+  const initializeChat = async () => {
+    // setLoading(true); // Don't block here if we can help it
+    
+    // Fetch read status and first page of messages CONCURRENTLY
+    const [readRes, msgRes] = await Promise.all([
+      supabase
+        .from('community_chat_read_status')
+        .select('last_read_at')
+        .eq('chat_id', chatId)
+        .eq('user_id', user?.id)
+        .maybeSingle(),
+      supabase
+        .from('community_chat_messages')
+        .select(`
+            *,
+            user:users(*),
+            parent_message:community_chat_messages!parent_message_id(
+                id,
+                message_text,
+                user:users(name)
+            )
+        `)
+        .eq('chat_id', chatId)
+        .is('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(MESSAGES_PER_PAGE)
+    ]);
+
+    const readAt = readRes.data?.last_read_at || null;
+    setLastReadAt(readAt);
+
+    const msgs = msgRes.data || [];
+    if (msgs.length < MESSAGES_PER_PAGE) setHasMore(false);
+
+    if (readAt) {
+      const firstUnread = [...msgs].reverse().find(m => new Date(m.created_at) > new Date(readAt));
+      if (firstUnread) setUnreadSeparatorId(firstUnread.id);
+    }
+
+    setMessages(msgs);
+    msgs.forEach(msg => { if (msg.user) userCache.current.set(msg.user.id, msg.user); });
+
+    setLoading(false);
+    setIsInitialLoading(false);
+    updateLastRead();
   };
 
   const handleRealtimeUpdate = async (payload: any) => {
@@ -378,33 +462,24 @@ export default function ChatDetailScreen() {
           );
 
           if (existingTempIndex !== -1) {
-            const existingTemp = prev[existingTempIndex];
             const newMessages = [...prev];
-
             newMessages[existingTempIndex] = {
               ...data,
-              tempId: existingTemp.tempId,
+              tempId: prev[existingTempIndex].tempId,
             };
-
             return newMessages;
           }
         }
 
-        // Prevent duplicate inserts if the message somehow re-arrives
-        if (prev.some(m => m.id === data.id)) {
-          return prev;
-        }
+        if (prev.some(m => m.id === data.id)) return prev;
 
-        // Update read status for incoming messages from others
-        if (!isMyMessage) {
-            updateLastRead();
-        }
-        
-        return [...prev, data];
+        if (!isMyMessage) updateLastRead();
+
+        // Since list is inverted, new messages are prepended to the array (top of the screen)
+        return [data, ...prev];
       });
 
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-
+      // For inverted list, no need to scroll to end, as index 0 is the bottom
     } else if (payload.eventType === 'UPDATE') {
       setMessages(prev => {
         if (payload.new.is_deleted) {
@@ -455,7 +530,7 @@ export default function ChatDetailScreen() {
 
         // 1. Optimistic Update Real Message in local state
         setMessages(prev => prev.map(m => m.id === editingMessage.id ? { ...m, message_text: textToSend, is_edited: true } : m));
-        
+
         // 2. Clear states
         setInputText('');
         setEditingMessage(null);
@@ -485,17 +560,15 @@ export default function ChatDetailScreen() {
           is_deleted: false,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          user: user as User,
+          user: user as any,
           tempId: tempId,
           isSending: true
         };
 
-        // 1. Optimistic Add to UI
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setMessages(prev => [...prev, optimisticMessage]);
+        // 1. Optimistic Add to UI (Prepended because inverted)
+        setMessages(prev => [optimisticMessage, ...prev]);
         setInputText('');
         setReplyingTo(null);
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
         // 2. DB Insert
         const { data: savedData, error } = await supabase
@@ -515,24 +588,29 @@ export default function ChatDetailScreen() {
           throw error;
         }
 
-        // --- IMMEDIATE UI SYNC (Fixes tempId sticking) ---
         if (savedData) {
-            setMessages(prev => prev.map(m => m.tempId === tempId ? {
-                ...m,
-                ...savedData,
-                user: m.user, // Keep local user data
-                parent_message: m.parent_message, // Keep local parent message info
-                tempId: undefined, // Clear temp ID
-                isSending: false // Clear sending state
-            } : m));
+          setMessages(prev => prev.map(m => m.tempId === tempId ? {
+            ...m,
+            ...savedData,
+            user: m.user,
+            parent_message: m.parent_message,
+            tempId: undefined,
+            isSending: false
+          } : m));
         }
       }
-    } catch (error:any) {
+    } catch (error: any) {
       crashlytics().recordError(error);
       console.log('[ERROR]:', 'Error sending/updating message:', error);
       setToastType('error');
       setToastMsg('Failed to process message');
     }
+  };
+
+  const handleScrollToBottom = () => {
+    isScrollingToBottom.current = true;
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setShowScrollToBottom(false);
   };
 
   const scrollToMessage = (messageId: string) => {
@@ -697,9 +775,9 @@ export default function ChatDetailScreen() {
                 onPress={() => scrollToMessage(item.parent_message_id!)}
                 style={styles.replyContainer}
               >
-                <View style={styles.replyBar} />
+                <View style={isMe ? styles.replyBar : styles.theirReplyBar} />
                 <View style={styles.replyContent}>
-                  <Text style={styles.replyUser}>{replyUser}</Text>
+                  <Text style={isMe ? styles.replyUser : styles.theirreplyUser}>{replyUser}</Text>
                   <Text style={isMe ? styles.myTimeText : styles.replyText} numberOfLines={2}>{replyText}</Text>
                 </View>
               </TouchableOpacity>
@@ -747,7 +825,7 @@ export default function ChatDetailScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.container}>
-      <StatusBar style="dark" backgroundColor="transparent" translucent />
+      <StatusBar style="dark" />
       <Toast
         message={toastMsg}
         onHide={() => setToastMsg(null)}
@@ -793,22 +871,42 @@ export default function ChatDetailScreen() {
           <FlatList
             ref={flatListRef}
             data={messages}
+            inverted
             showsVerticalScrollIndicator={false}
             renderItem={renderMessage}
             keyExtractor={(item, index) => item.id ?? item.tempId ?? `msg-${index}`}
             contentContainerStyle={styles.listContent}
-            style={{ flex: 1 }}
+            onEndReached={loadMoreMessages}
+            onEndReachedThreshold={0.15}
             initialNumToRender={20}
             maxToRenderPerBatch={20}
             windowSize={10}
-            removeClippedSubviews={true}
-            updateCellsBatchingPeriod={50}
-            maintainVisibleContentPosition={{
-              minIndexForVisible: 0
-            }}
+            removeClippedSubviews={Platform.OS === 'ios'}
             keyboardShouldPersistTaps="handled"
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            onScroll={(event) => {
+              if (isScrollingToBottom.current) {
+                if (event.nativeEvent.contentOffset.y <= 10) {
+                  isScrollingToBottom.current = false;
+                }
+                return;
+              }
+              const y = event.nativeEvent.contentOffset.y;
+              if (y > 300 && !showScrollToBottom) {
+                setShowScrollToBottom(true);
+              } else if (y <= 300 && showScrollToBottom) {
+                setShowScrollToBottom(false);
+              }
+            }}
+            onMomentumScrollEnd={() => {
+              isScrollingToBottom.current = false;
+            }}
+            scrollEventThrottle={16}
+            ListFooterComponent={() => isFetchingMore ? (
+                <View style={{ paddingVertical: spacing.md }}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+            ) : null}
+            style={{ flex: 1 }}
           />
         )}
 
@@ -907,6 +1005,32 @@ export default function ChatDetailScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Scroll to Bottom Button */}
+      <Animated.View
+        style={[
+          styles.scrollToBottomBtn,
+          {
+            opacity: scrollToBottomAnim,
+            transform: [
+              { scale: scrollToBottomAnim },
+              { translateY: scrollToBottomAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [15, 0]
+                })
+              }
+            ]
+          }
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.scrollToBottomInner}
+          onPress={handleScrollToBottom}
+          activeOpacity={0.8}
+        >
+          <ChevronDown size={24} color="#FFF" />
+        </TouchableOpacity>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -1063,7 +1187,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -1072,7 +1196,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginRight: 10,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.border,
   },
   sendButton: {
     width: 44,
@@ -1105,6 +1229,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     opacity: 0.7,
   },
+  theirReplyBar: {
+    width: 4,
+    backgroundColor: colors.primary + "60",
+    opacity: 0.7,
+  },
   replyContent: {
     padding: 6,
     flex: 1
@@ -1113,6 +1242,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     color: '#ffe8d6',
+    marginBottom: 2,
+  },
+  theirreplyUser: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: colors.primary + "60",
     marginBottom: 2,
   },
   replyText: {
@@ -1174,5 +1309,29 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.borderLight,
     marginVertical: 4,
+  },
+  scrollToBottomBtn: {
+    position: 'absolute',
+    bottom: 100, // Above input container approx
+    right: 16,
+    zIndex: 1000,
+  },
+  scrollToBottomInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
 });

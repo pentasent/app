@@ -7,8 +7,6 @@ import {
     TouchableOpacity,
     ScrollView,
     TextInput,
-    KeyboardAvoidingView,
-    Platform,
     Dimensions,
     Pressable,
     Animated,
@@ -17,10 +15,11 @@ import {
 import { colors, spacing, borderRadius } from '../../constants/theme';
 import { MOODS, ENERGY_LEVELS, STRESS_LEVELS, SLEEP_QUALITY, MoodTag } from '../../constants/moods';
 import Slider from '@react-native-community/slider';
-import { X, LayoutGrid, Calendar1, Calendar } from 'lucide-react-native';
+import { Calendar } from 'lucide-react-native';
 import { MoodSquare } from './MoodSquare';
 import { useAuth } from '../../contexts/AuthContext';
 import KeyboardShiftView from '../KeyboardShiftView';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -204,9 +203,9 @@ export const MoodCheckInSheet: React.FC<MoodCheckInSheetProps> = ({
                                     <Text style={styles.headerSubtitle}>How are you feeling, {user?.name || 'there'}?</Text>
                                 </View>
                             </View>
-                            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                            {/* <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                                 <X size={20} color={colors.text} />
-                            </TouchableOpacity>
+                            </TouchableOpacity> */}
                         </View>
 
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -269,25 +268,27 @@ export const MoodCheckInSheet: React.FC<MoodCheckInSheetProps> = ({
                                 textAlignVertical="top"
                             />
 
-                            <TouchableOpacity 
-                                style={[styles.submitButton, isSubmitting && { opacity: 0.8 }]}
-                                onPress={handleSubmit}
-                                disabled={isSubmitting}
-                                activeOpacity={0.8}
-                            >
-                                {isSubmitting ? (
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 8 }} />
-                                        <Text style={styles.submitButtonText}>Saving...</Text>
-                                    </View>
-                                ) : (
-                                    <Text style={styles.submitButtonText}>Complete Check-in</Text>
-                                )}
-                            </TouchableOpacity>
-
-                            <View style={{ height: spacing.xl * 2 }} />
                         </ScrollView>
                     </View>
+
+                    {/* Sticky Footer for Button - Fixed over Safe Area */}
+                    <SafeAreaView edges={['bottom']} style={styles.footer}>
+                        <TouchableOpacity 
+                            style={[styles.submitButton, isSubmitting && { opacity: 0.8 }]}
+                            onPress={handleSubmit}
+                            disabled={isSubmitting}
+                            activeOpacity={0.8}
+                        >
+                            {isSubmitting ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 8 }} />
+                                    <Text style={styles.submitButtonText}>Saving...</Text>
+                                </View>
+                            ) : (
+                                <Text style={styles.submitButtonText}>Complete Check-in</Text>
+                            )}
+                        </TouchableOpacity>
+                    </SafeAreaView>
                 </KeyboardShiftView>
             </View>
         </Modal>
@@ -308,11 +309,10 @@ const styles = StyleSheet.create({
     },
     sheet: {
         backgroundColor: colors.background,
-        borderTopLeftRadius: 32,
-        borderTopRightRadius: 32,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
         paddingTop: spacing.lg,
-        // paddingHorizontal: spacing.lg,
-        paddingBottom: Platform.OS === 'ios' ? spacing.xl : spacing.lg,
+        flexShrink: 1, // Allow it to shrink if needed
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -10 },
         shadowOpacity: 0.1,
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     scrollContent: {
-        paddingTop: spacing.sm,
+        // paddingTop: spacing.sm,
         paddingHorizontal: spacing.lg,
     },
     sectionLabel: {
@@ -376,10 +376,10 @@ const styles = StyleSheet.create({
         paddingBottom: spacing.lg,
     },
     sliderGroup: {
-        marginTop: spacing.md,
+        marginTop: spacing.sm,
     },
     sliderSection: {
-        marginBottom: spacing.xl,
+        marginBottom: spacing.md,
     },
     sliderHeader: {
         flexDirection: 'row',
@@ -456,5 +456,13 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 16,
         fontWeight: '700',
+    },
+    footer: {
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.md, // SafeAreaView handles the rest
+        borderTopWidth: 1,
+        borderTopColor: colors.borderLight,
+        backgroundColor: colors.background,
     },
 });

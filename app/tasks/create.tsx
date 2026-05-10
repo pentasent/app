@@ -13,6 +13,7 @@ import { Toast } from '@/components/Toast';
 import { useApp } from '@/contexts/AppContext';
 import { trackEvent } from '@/lib/analytics/track';
 import { CustomTimePicker } from '@/components/CustomTimePicker';
+import { MayaService } from '@/lib/maya/service';
 
 const MAX_TITLE_LENGTH = 50;
 const AVAILABLE_TAGS = ['Work', 'Personal', 'Health', 'Diet', 'Learning', 'Shopping', 'Home', 'Finance'];
@@ -82,6 +83,14 @@ export default function CreateTaskScreen() {
 
         try {
             setIsSubmitting(true);
+            
+            // Quota Check
+            const { allowed } = await MayaService.checkTasksQuota(user.id);
+            if (!allowed) {
+                router.push('/subscription/upgrade');
+                setIsSubmitting(false);
+                return;
+            }
 
             // 1. Create Main Task
             const { data: mainTaskData, error: mainTaskError } = await supabase
@@ -378,7 +387,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: spacing.lg,
-        paddingTop: spacing.md,
+        paddingTop: spacing.sm,
         paddingBottom: spacing.sm,
         borderBottomWidth: 1,
         borderBottomColor: colors.borderLight,
@@ -399,6 +408,7 @@ const styles = StyleSheet.create({
     },
     content: {
         padding: spacing.lg,
+        paddingTop: spacing.md,
         paddingBottom: 40,
     },
     inputGroup: {

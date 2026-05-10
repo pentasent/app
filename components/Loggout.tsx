@@ -28,7 +28,6 @@ export default function LoggoutButton() {
     try {
       await logout();
       setShowLogoutModal(false);
-      router.replace('/login');
     } catch (error) {
       console.log('[ERROR]:', error);
       setIsLoggingOut(false);

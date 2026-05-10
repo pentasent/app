@@ -15,7 +15,7 @@ interface FeedHeaderProps {
     onProfilePress: () => void;
 }
 
-export const FeedHeader: React.FC<FeedHeaderProps> = React.memo(({
+export const FeedHeader: React.FC<FeedHeaderProps> = ({
     user,
     communities,
     selectedCommunityId,
@@ -113,7 +113,7 @@ export const FeedHeader: React.FC<FeedHeaderProps> = React.memo(({
             </Modal>
         </View>
     );
-});
+};
 
 const styles = StyleSheet.create({
     container: {

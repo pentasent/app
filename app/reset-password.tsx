@@ -27,6 +27,17 @@ const AnimatedImage = Animated.createAnimatedComponent(Image);
 export default function ResetPasswordScreen() {
     const router = useRouter();
     const { setIsResetVerified, refreshUser } = useAuth();
+    const isNavigating = useRef(false);
+
+    const safePush = (route: string) => {
+        if (isNavigating.current) return;
+        isNavigating.current = true;
+        // @ts-ignore
+        router.push(route);
+        setTimeout(() => {
+            isNavigating.current = false;
+        }, 500);
+    };
 
     // Stage Management
     const [stage, setStage] = useState<'request' | 'verify' | 'reset'>('request');
@@ -411,7 +422,14 @@ export default function ResetPasswordScreen() {
                             {stage === 'request' && (
                                 <Button
                                     title="Back to Login"
-                                    onPress={() => router.replace('/login')}
+                                    onPress={() => {
+                                        if (isNavigating.current) return;
+                                        isNavigating.current = true;
+                                        router.back();
+                                        setTimeout(() => {
+                                            isNavigating.current = false;
+                                        }, 500);
+                                    }}
                                     variant="ghost"
                                     style={{
                                         marginTop: spacing.md,

@@ -460,3 +460,144 @@ export interface UserDailyCheckin {
     checkin_date: string; // YYYY-MM-DD
     created_at: string;
 }
+
+export interface MayaChat {
+    id: string;
+    user_id: string;
+    title?: string | null;
+    message_count: number;
+    status: 'active' | 'archived';
+    last_message_at?: string | null;
+    feedback?: 'up' | 'down' | null;
+    feedback_at?: string | null;
+    created_at: string;
+}
+
+export interface MayaMessage {
+    id: string;
+    chat_id: string;
+    sender: 'user' | 'maya' | 'system';
+    message_text: string;
+    message_json?: any | null; // For rich responses or metadata
+    tokens_used?: number | null;
+    flagged: boolean;
+    mood_detected?: string | null;
+    intent?: string | null;
+    created_at: string;
+}
+
+export interface MayaUsage {
+    id: string;
+    user_id: string;
+    date: string; // YYYY-MM-DD
+    chats_created: number;
+    messages_sent: number;
+    created_at: string;
+}
+
+export interface MayaSafetyLog {
+    id: string;
+    user_id: string;
+    chat_id: string;
+    message: string;
+    category: 'abuse' | 'self_harm' | 'medical' | 'sexual' | 'violence' | 'illegal' | 'out_of_scope';
+    created_at: string;
+}
+
+export interface PlanLimit {
+    maya: {
+        chats_per_day: number;
+        messages_per_chat: number;
+    };
+    journal: {
+        entries_per_day: number;
+    };
+    tasks: {
+        tasks_per_day: number;
+    };
+    beats: {
+        categories: number;
+    };
+    yoga: {
+        premium_access: boolean;
+    };
+    sounds: {
+        premium_access: boolean;
+    };
+    communities: {
+        access: boolean;
+    };
+    habits: {
+        tracking: boolean;
+    };
+}
+
+export interface Plan {
+    id: string;
+    name: string;
+    price_usd: number;
+    description: string | null;
+    limits: PlanLimit;
+    created_at: string;
+}
+
+export interface UserSubscription {
+    id: string;
+    user_id: string;
+    plan_id: string;
+    status: 'active' | 'canceled' | 'expired';
+    start_date: string;
+    end_date: string | null;
+    is_complementary: boolean;
+    offered_by?: string | null;
+    created_at: string;
+    updated_at: string;
+    // Join
+    plan?: Plan;
+}
+
+export interface Game {
+    id: string;
+    slug: string;
+    name: string;
+    description?: string | null;
+    thumbnail_url?: string | null;
+    is_active: boolean;
+    is_paid: boolean;
+    price: number;
+    sort_order: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface GameSession {
+    id: string;
+    user_id: string;
+    game_id: string;
+    score: number;
+    duration_seconds: number;
+    is_completed: boolean;
+    metadata: any;
+    started_at: string;
+    ended_at?: string | null;
+    created_at: string;
+}
+
+export interface GameUserStat {
+    user_id: string;
+    game_id: string;
+    total_score: number;
+    highest_score: number;
+    total_sessions: number;
+    total_play_time: number;
+    streak_days: number;
+    last_played_at: string | null;
+    updated_at: string;
+}
+
+export interface YogaDayRegistration {
+    id: number;
+    user_id: string;
+    registered_at: string;
+    created_at: string;
+}

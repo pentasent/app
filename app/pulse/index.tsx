@@ -19,6 +19,7 @@ import { format, subDays, startOfDay, isSameDay } from 'date-fns';
 import { UserDailyCheckin } from '@/types/database';
 import { MoodCheckInSheet } from '../../components/pulse/MoodCheckInSheet';
 import { PulseShimmer } from '../../components/shimmers/PulseShimmer';
+import { MoodIcon } from '../../components/moods/MoodIcon';
 
 const { width } = Dimensions.get('window');
 
@@ -109,7 +110,11 @@ export default function PulseAnalyticsScreen() {
                     <Text style={styles.pillDayName}>{dayName}</Text>
                     <Text style={styles.pillDayNum}>{dayNum}</Text>
                     <View style={styles.pillMood}>
-                        {mood ? <Text style={styles.pillEmoji}>{mood.emoji}</Text> : <View style={styles.pillEmpty} />}
+                        {mood ? (
+                            <MoodIcon tag={mood.tag} color={mood.color} selected={false} size={32} />
+                        ) : (
+                            <View style={styles.pillEmpty} />
+                        )}
                     </View>
                 </View>
             );
@@ -140,9 +145,16 @@ export default function PulseAnalyticsScreen() {
         return (
             <View style={styles.todayCard}>
                 <View style={styles.todayHeader}>
-                    <Text style={styles.todayTitle}>Today</Text>
-                    <View style={[styles.moodBadge, { backgroundColor: todayMood?.color + '20' }]}>
-                        <Text style={[styles.moodBadgeText, { color: todayMood?.color }]}>{todayMood?.label}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {todayMood && (
+                            <View style={{ marginHorizontal: 6 }}>
+                                <MoodIcon tag={todayMood.tag} color={todayMood.color} selected={true} size={20} />
+                            </View>
+                        )}
+                        <Text style={styles.todayTitle}>Today </Text>
+                    </View>
+                    <View style={[styles.moodBadge, { backgroundColor: (todayMood?.color || colors.primary) + '20' }]}>
+                        <Text style={[styles.moodBadgeText, { color: todayMood?.color || colors.primary }]}>{todayMood?.label}</Text>
                     </View>
                 </View>
 

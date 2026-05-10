@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView, Pressab
 import { colors, spacing, borderRadius } from '../../constants/theme';
 import { MOODS, MoodConfig } from '../../constants/moods';
 import { MoodSquare } from './MoodSquare';
-import { LayoutGrid, Sparkles, Heart } from 'lucide-react-native';
 
 interface MoodCheckInCardProps {
     onMoodSelect: (mood: MoodConfig) => void;

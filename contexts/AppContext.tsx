@@ -1,27 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import crashlytics from '@/lib/crashlytics';
-import { Chat, Routine, CartItem, Notification, Message, RoutineTask } from '../types';
-import { diseases } from '../constants/dummyData';
+import { Notification } from '../types';
 import { supabase, useAuth } from './AuthContext';
 
 interface AppContextType {
-  chats: Chat[];
-  routines: Routine[];
-  cart: CartItem[];
   notifications: Notification[];
   unreadCount: number;
-  addChat: (chat: Chat) => void;
-  updateChat: (chatId: string, updates: Partial<Chat>) => void;
-  addMessageToChat: (chatId: string, message: Message) => void;
-  deleteChat: (chatId: string) => void;
-  createRoutineFromChat: (chatId: string) => void;
-  addToCart: (productId: string) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartQuantity: (productId: string, quantity: number) => void;
-  clearCart: () => void;
-  updateRoutineTask: (routineId: string, taskId: string, completed: boolean) => void;
   markNotificationRead: (notificationId: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
   fetchNotifications: () => Promise<void>;
@@ -35,10 +20,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [routines, setRoutines] = useState<Routine[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const { user, isRealtimeReady } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState<boolean | null>(true);
@@ -61,28 +43,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToast(prev => ({ ...prev, message: null }));
   }, []);
 
-  // 1. Unified Network Observer
+  // Unified Network Observer
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       const isOnline = !!state.isConnected && !!state.isInternetReachable;
       
       setIsConnected(prev => {
         if (prev !== isOnline) {
-             // Handle the "lost connection" toast logic inside the context
-             // only if the toast is the network-related one
              if (!isOnline) {
-                // If it's not verified, we'll let the RootLayout trigger the NoInternetScreen
-                // But for already in-app users, we trigger a global toast
-                if (user && user.is_onboarded) {
+                if (user && (user as any).is_onboarded) {
                     showToast("Connection lost. Reconnecting to mission control...", "error", 0);
                 }
              } else {
-                 setToast(current => {
+                  setToast(current => {
                     if (current.message === "Connection lost. Reconnecting to mission control...") {
                         return { ...current, message: null };
                     }
                     return current;
-                 });
+                  });
              }
         }
         return isOnline;
@@ -93,28 +71,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [user]);
 
   useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    saveData();
-  }, [chats, routines, cart]);
-
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    if (user && user.is_verified) {
+    if (user && (user as any).is_verified) {
+      // console.log('[DEBUG-Notification] Initial fetch starting...');
       fetchNotifications();
-      unsubscribe = subscribeToNotifications();
     } else {
       setNotifications([]);
       setUnreadCount(0);
     }
+  }, [user?.id, (user as any)?.is_verified]);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+
+    if (user && (user as any).is_verified && isRealtimeReady) {
+      // console.log('[DEBUG-Notification] Realtime ready. Starting subscription...');
+      unsubscribe = subscribeToNotifications();
+    }
 
     return () => {
-      if (unsubscribe) unsubscribe();
+      if (unsubscribe) {
+        // console.log('[DEBUG-Notification] Cleaning up subscription');
+        unsubscribe();
+      }
     };
-  }, [user]);
+  }, [user?.id, (user as any)?.is_verified, isRealtimeReady]);
 
   const fetchNotifications = async () => {
     if (!user) return;
@@ -134,7 +114,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setUnreadCount(unread);
       }
     } catch (error) {
-      console.log('[ERROR]:', 'Error fetching notifications:', error);
+      // console.error('[Notifications] Fetch failed:', error);
       crashlytics().recordError(error as any);
     }
   };
@@ -143,12 +123,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!user) return;
 
     const channelName = `notifications_user_${user.id}`;
+    
+    // Check internal auth state
+    const rtToken = (supabase.realtime as any).accessToken;
+    // console.log(`[DEBUG-Notification] Creating channel: ${channelName}. RT Auth Token Present: ${!!rtToken}`);
 
-    console.log(`Setting up notification subscription for user: ${user.id}`);
-
-    let lastStatus: string | null = null;
     const channel = supabase
-      .channel(channelName)
+      .channel(`notifications_user_${user.id}`, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: user.id }
+        },
+      })
       .on(
         'postgres_changes',
         {
@@ -157,203 +143,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           table: 'notifications',
         },
         (payload) => {
-          // Verify if this notification belongs to the current user
           const newNotif = payload.new as any;
           if (newNotif && newNotif.user_id === user.id) {
-            console.log('Real-time notification received for user:', user.id);
             fetchNotifications();
           }
         }
       )
-      .subscribe((status) => {
-        if (status !== lastStatus) {
-          console.log(`Notification subscription [${user.id.substring(0, 8)}...]:`, status);
-          lastStatus = status;
-        }
-
-        if (status === 'SUBSCRIBED') {
-          fetchNotifications();
-        }
+      .subscribe((status, err) => {
+        // console.log('[DEBUG-Notification] Status transition:', status);
+        if (err) console.error('[DEBUG-Notification] ERROR:', err);
       });
 
     return () => {
-      console.log(`Cleaning up notification subscription for user: ${user.id}`);
+      // console.log(`[DEBUG-Notification] Cleaning up channel: ${channelName}`);
       supabase.removeChannel(channel);
     };
   };
 
-  const loadData = async () => {
-    try {
-      const [chatsData, routinesData, cartData, notificationsData] = await Promise.all([
-        AsyncStorage.getItem('chats'),
-        AsyncStorage.getItem('routines'),
-        AsyncStorage.getItem('cart'),
-        AsyncStorage.getItem('notifications'),
-      ]);
-
-      if (chatsData) setChats(JSON.parse(chatsData));
-      if (routinesData) setRoutines(JSON.parse(routinesData));
-      if (cartData) setCart(JSON.parse(cartData));
-
-      if (notificationsData) {
-        // setNotifications(JSON.parse(notificationsData)); 
-        // We now fetch from supabase, so ignore local storage for notifications
-      } else {
-        // const initialNotifications: Notification[] = ...
-        // Ignore dummy data
-      }
-
-      // }
-    } catch (error) {
-      console.log('[ERROR]:', 'Error loading data:', error);
-      crashlytics().recordError(error as any);
-    }
-  };
-
-  const saveData = async () => {
-    try {
-      await Promise.all([
-        AsyncStorage.setItem('chats', JSON.stringify(chats)),
-        AsyncStorage.setItem('routines', JSON.stringify(routines)),
-        AsyncStorage.setItem('cart', JSON.stringify(cart)),
-        AsyncStorage.setItem('chats', JSON.stringify(chats)),
-        AsyncStorage.setItem('routines', JSON.stringify(routines)),
-        AsyncStorage.setItem('cart', JSON.stringify(cart)),
-        // AsyncStorage.setItem('notifications', JSON.stringify(notifications)), // Sync with Supabase instead
-      ]);
-    } catch (error) {
-      console.log('[ERROR]:', 'Error saving data:', error);
-      crashlytics().recordError(error as any);
-    }
-  };
-
-  const addChat = (chat: Chat) => {
-    setChats((prev) => [chat, ...prev]);
-  };
-
-  const updateChat = (chatId: string, updates: Partial<Chat>) => {
-    setChats((prev) =>
-      prev.map((chat) => (chat.id === chatId ? { ...chat, ...updates } : chat))
-    );
-  };
-
-  const addMessageToChat = (chatId: string, message: Message) => {
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === chatId
-          ? { ...chat, messages: [...chat.messages, message] }
-          : chat
-      )
-    );
-  };
-
-  const deleteChat = (chatId: string) => {
-    setChats((prev) => prev.filter((chat) => chat.id !== chatId));
-
-    const routinesToDelete = routines.filter((r) => r.chatId === chatId);
-    if (routinesToDelete.length > 0) {
-      setRoutines((prev) => prev.filter((r) => r.chatId !== chatId));
-    }
-
-    addNotification({
-      title: 'Chat Deleted',
-      message: 'Your consultation has been deleted successfully.',
-      notification_type: 'account',
-      category: 'info'
-    });
-  };
-
-  const createRoutineFromChat = (chatId: string) => {
-    const chat = chats.find((c) => c.id === chatId);
-    if (!chat || !chat.diseaseId) return;
-
-    const disease = diseases.find((d) => d.id === chat.diseaseId);
-    if (!disease) return;
-
-    const totalDays = 7;
-    const totalTasks = disease.routineTasks.length;
-    const tasksPerDay = Math.ceil(totalTasks / totalDays);
-
-    const tasks: RoutineTask[] = disease.routineTasks.map((task, index) => ({
-      id: `task-${Date.now()}-${index}`,
-      title: task,
-      completed: false,
-      day: Math.min(Math.floor(index / tasksPerDay) + 1, totalDays),
-    }));
-
-    const routine: Routine = {
-      id: `routine-${Date.now()}`,
-      name: disease.name,
-      description: disease.description,
-      diseaseId: disease.id,
-      startDate: new Date().toISOString(),
-      tasks,
-      chatId,
-    };
-
-    setRoutines((prev) => [routine, ...prev]);
-    updateChat(chatId, { routineCreated: true });
-
-    addNotification({
-      title: 'Routine Created',
-      message: `Your ${disease.name} skincare routine has been created successfully!`,
-      notification_type: 'routine',
-      category: 'success'
-    });
-  };
-
-  const addToCart = (productId: string) => {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.productId === productId);
-      if (existing) {
-        return prev.map((item) =>
-          item.productId === productId
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
-      return [...prev, { productId, quantity: 1 }];
-    });
-  };
-
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.productId !== productId));
-  };
-
-  const updateCartQuantity = (productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(productId);
-      return;
-    }
-    setCart((prev) =>
-      prev.map((item) =>
-        item.productId === productId ? { ...item, quantity } : item
-      )
-    );
-  };
-
-  const clearCart = () => {
-    setCart([]);
-  };
-
-  const updateRoutineTask = (routineId: string, taskId: string, completed: boolean) => {
-    setRoutines((prev) =>
-      prev.map((routine) =>
-        routine.id === routineId
-          ? {
-            ...routine,
-            tasks: routine.tasks.map((task) =>
-              task.id === taskId ? { ...task, completed } : task
-            ),
-          }
-          : routine
-      )
-    );
-  };
-
   const markNotificationRead = async (notificationId: string) => {
     try {
-      // Optimistic update
       setNotifications((prev) =>
         prev.map((notif) =>
           notif.id === notificationId ? { ...notif, is_seen: true } : notif
@@ -368,16 +176,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (error) throw error;
     } catch (error) {
-      console.log('[ERROR]:', 'Error marking notification read', error);
+      // console.log('[ERROR]:', 'Error marking notification read', error);
       crashlytics().recordError(error as any);
-      fetchNotifications(); // Revert on error
+      fetchNotifications();
     }
   };
 
   const markAllNotificationsRead = async () => {
     if (!user) return;
     try {
-      // Optimistic update
       setNotifications((prev) =>
         prev.map((notif) => ({ ...notif, is_seen: true }))
       );
@@ -393,7 +200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (error) {
       console.log('[ERROR]:', 'Error marking all notifications read', error);
       crashlytics().recordError(error as any);
-      fetchNotifications(); // Revert on error
+      fetchNotifications();
     }
   };
 
@@ -409,7 +216,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       if (error) throw error;
-      // Force immediate refresh for the current user
       await fetchNotifications();
     } catch (e) {
       console.log('[ERROR]:', 'Error adding notification:', e);
@@ -418,20 +224,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const contextValue = React.useMemo(() => ({
-    chats,
-    routines,
-    cart,
     notifications,
-    addChat,
-    updateChat,
-    addMessageToChat,
-    deleteChat,
-    createRoutineFromChat,
-    addToCart,
-    removeFromCart,
-    updateCartQuantity,
-    clearCart,
-    updateRoutineTask,
     markNotificationRead,
     markAllNotificationsRead,
     fetchNotifications,
@@ -442,9 +235,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     hideToast,
     isConnected,
   }), [
-    chats, routines, cart, notifications, addChat, updateChat, addMessageToChat,
-    deleteChat, createRoutineFromChat, addToCart, removeFromCart, updateCartQuantity,
-    clearCart, updateRoutineTask, markNotificationRead, markAllNotificationsRead,
+    notifications, markNotificationRead, markAllNotificationsRead,
     fetchNotifications, unreadCount, addNotification, showToast, toast, hideToast,
     isConnected
   ]);

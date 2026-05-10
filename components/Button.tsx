@@ -21,7 +21,10 @@ export const Button: React.FC<ButtonProps> = ({
   style,
   textStyle,
 }) => {
-  const isDisabled = disabled;
+  // Visual state: only show dull/disabled style if not loading
+  const showDisabledStyle = disabled && !loading;
+  // Interaction state: block clicks if either disabled OR loading
+  const isInteractionDisabled = disabled || loading;
 
   return (
     <TouchableOpacity
@@ -32,11 +35,11 @@ export const Button: React.FC<ButtonProps> = ({
         variant === 'secondary' && styles.secondaryButton,
         variant === 'outline' && styles.outlineButton,
         variant === 'ghost' && styles.ghostButton,
-        isDisabled && styles.disabledButton,
+        showDisabledStyle && styles.disabledButton,
         style,
       ]}
       onPress={onPress}
-      disabled={isDisabled}
+      disabled={isInteractionDisabled}
       activeOpacity={0.7}
     >
       {loading ? (
@@ -56,7 +59,7 @@ export const Button: React.FC<ButtonProps> = ({
             variant === 'secondary' && styles.secondaryButtonText,
             variant === 'outline' && styles.outlineButtonText,
             variant === 'ghost' && styles.ghostButtonText,
-            isDisabled && styles.disabledButtonText,
+            showDisabledStyle && styles.disabledButtonText,
             textStyle,
           ]}
         >

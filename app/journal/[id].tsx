@@ -11,6 +11,8 @@ import { JournalDetailShimmer } from '@/components/shimmers/JournalDetailShimmer
 import { Toast } from '@/components/Toast';
 import { useApp } from '@/contexts/AppContext';
 import { trackEvent } from '@/lib/analytics/track';
+import { MayaService } from '@/lib/maya/service';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 
 const MOODS = [
     { label: 'Happy', emoji: '😊', value: 8 },
@@ -26,6 +28,7 @@ export default function JournalEntryScreen() {
     const router = useRouter();
     const { user } = useAuth();
     const { addNotification } = useApp();
+    const { limits, isExpired, subscription } = useSubscription();
 
     const isNew = id === 'new';
 
@@ -110,6 +113,24 @@ export default function JournalEntryScreen() {
 
         try {
             setSaving(true);
+            
+            // Quota Check for new entries
+            if (isNew) {
+                // If expired or no sub, always block
+                if (isExpired || !subscription) {
+                    router.push('/subscription/upgrade');
+                    setSaving(false);
+                    return;
+                }
+
+                const { allowed } = await MayaService.checkJournalQuota(user.id);
+                if (!allowed) {
+                    router.push('/subscription/upgrade');
+                    setSaving(false);
+                    return;
+                }
+            }
+
             const payload = {
                 user_id: user.id, // Ensure strict user.id usage
                 title: title.trim() || null,
@@ -396,7 +417,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: spacing.lg,
-        paddingTop: spacing.md,
+        paddingTop: spacing.sm,
         paddingBottom: spacing.sm,
         borderBottomWidth: 1,
         borderBottomColor: colors.borderLight,
@@ -420,6 +441,7 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: spacing.lg,
+        paddingTop: spacing.md,
     },
 
     // Inputs

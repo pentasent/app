@@ -1,50 +1,67 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import { View, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
 import { colors, spacing, borderRadius } from '@/constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width } = Dimensions.get('window');
+
+const ShimmerBox = ({ style, translateX }: { style: any, translateX: Animated.Value }) => (
+    <View style={[style, { backgroundColor: '#F5F5F5', overflow: 'hidden' }]}>
+        <Animated.View
+            style={[
+                StyleSheet.absoluteFill,
+                {
+                    transform: [{ translateX }],
+                },
+            ]}
+        >
+            <LinearGradient
+                colors={['#F5F5F5', '#FFFFFF', '#F5F5F5']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+            />
+        </Animated.View>
+    </View>
+);
 
 export const BeatCardShimmer = () => {
-    const opacity = useRef(new Animated.Value(0.3)).current;
+    const translateX = useRef(new Animated.Value(-width)).current;
 
     useEffect(() => {
         Animated.loop(
-            Animated.sequence([
-                Animated.timing(opacity, {
-                    toValue: 0.7,
-                    duration: 1000,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(opacity, {
-                    toValue: 0.3,
-                    duration: 1000,
-                    useNativeDriver: true,
-                })
-            ])
+            Animated.timing(translateX, {
+                toValue: width,
+                duration: 1500,
+                easing: Easing.linear,
+                useNativeDriver: true,
+            })
         ).start();
-    }, [opacity]);
+    }, [translateX]);
 
     return (
-        <Animated.View style={[styles.card, { opacity }]}>
-            <View style={[styles.imageContainer, { backgroundColor: colors.border }]} />
+        <View style={styles.card}>
+            <ShimmerBox style={styles.imageContainer} translateX={translateX} />
 
             <View style={styles.content}>
                 <View style={styles.headerRow}>
-                    <View style={{ width: '70%', height: 16, backgroundColor: colors.border, borderRadius: 4 }} />
+                    <ShimmerBox style={{ width: '70%', height: 16, borderRadius: 4 }} translateX={translateX} />
                 </View>
 
-                <View style={{ width: '90%', height: 13, backgroundColor: colors.border, borderRadius: 4, marginBottom: 4, marginTop: 4 }} />
+                <ShimmerBox style={{ width: '90%', height: 13, borderRadius: 4, marginBottom: 4, marginTop: 4 }} translateX={translateX} />
 
                 <View style={styles.footer}>
                     {/* Tag Chip Placeholder */}
-                    <View style={{ width: 60, height: 18, backgroundColor: colors.border, borderRadius: borderRadius.full }} />
+                    <ShimmerBox style={{ width: 60, height: 18, borderRadius: borderRadius.full }} translateX={translateX} />
 
                     {/* Stats Placeholder */}
                     <View style={styles.stats}>
-                        <View style={{ width: 12, height: 12, backgroundColor: colors.border, borderRadius: 2 }} />
-                        <View style={{ width: 40, height: 11, backgroundColor: colors.border, borderRadius: 2 }} />
+                        <ShimmerBox style={{ width: 12, height: 12, borderRadius: 2 }} translateX={translateX} />
+                        <ShimmerBox style={{ width: 40, height: 11, borderRadius: 2 }} translateX={translateX} />
                     </View>
                 </View>
             </View>
-        </Animated.View>
+        </View>
     );
 };
 

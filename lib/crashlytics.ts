@@ -1,33 +1,32 @@
-/**
- * A safe wrapper for Crashlytics that prevents crashes in environments 
- * where the native module is not available (like Expo Go).
- */
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 
-const getCrashlyticsInstance = () => {
-  try {
-    // Dynamic require to avoid crashes during initial import in Expo Go
-    const crashlytics = require('@react-native-firebase/crashlytics').default;
-    return crashlytics;
-  } catch (e) {
-    return null;
-  }
-};
+let nativeInstance: any = null;
+let isInitialized = false;
 
-const nativeInstance = getCrashlyticsInstance();
+// Determine if we are running in Expo Go
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 // Mock object that matches the crashlytics().... API
 const mockInstance = {
   recordError: (error: any) => {
-    console.log('[CRASHLYTICS_MOCK_NOTIFICATION]: Captured in mock:', error);
+    if (__DEV__) {
+      console.log('[CRASHLYTICS_MOCK]: Captured error:', error);
+    }
   },
   log: (message: string) => {
-    console.log('[CRASHLYTICS_MOCK_LOG]:', message);
+    if (__DEV__) {
+      console.log('[CRASHLYTICS_MOCK_LOG]:', message);
+    }
   },
   setUserId: (id: string) => {
-    console.log('[CRASHLYTICS_MOCK_USER_ID]:', id);
+    if (__DEV__) {
+      console.log('[CRASHLYTICS_MOCK_USER_ID]:', id);
+    }
   },
   setAttribute: (key: string, value: string) => {
-    console.log(`[CRASHLYTICS_MOCK_ATTR]: ${key}=${value}`);
+    if (__DEV__) {
+      console.log(`[CRASHLYTICS_MOCK_ATTR]: ${key}=${value}`);
+    }
   }
 };
 
@@ -36,15 +35,26 @@ const mockInstance = {
  * otherwise returns a safe mock object.
  */
 const crashlytics = () => {
-  if (nativeInstance) {
-    try {
-        // Try calling to ensure native app is initialized
-        return nativeInstance();
-    } catch (e) {
-        return mockInstance;
-    }
+  if (isInitialized) return nativeInstance || mockInstance;
+
+  // CRITICAL: Never require native modules in Expo Go
+  if (isExpoGo) {
+    isInitialized = true;
+    return mockInstance;
   }
-  return mockInstance;
+
+  try {
+    const crashlyticsModule = require('@react-native-firebase/crashlytics');
+    if (crashlyticsModule) {
+      nativeInstance = crashlyticsModule.default();
+    }
+  } catch (e) {
+    // Silent fail
+  } finally {
+    isInitialized = true;
+  }
+
+  return nativeInstance || mockInstance;
 };
 
 export default crashlytics;

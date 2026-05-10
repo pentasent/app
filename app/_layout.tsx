@@ -1,14 +1,15 @@
-import 'react-native-url-polyfill/auto'
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { useRootNavigationState, Stack, useRouter, useSegments } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { AppProvider, useApp } from '../contexts/AppContext';
+import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 import { FeedProvider } from '../contexts/FeedContext';
-import { View, ActivityIndicator, StyleSheet, LogBox, Platform } from 'react-native';
+import { SessionProvider } from '../contexts/SessionContext';
+import { View, StyleSheet, LogBox, Platform } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { colors } from '../constants/theme';
 import Constants from 'expo-constants';
@@ -27,10 +28,12 @@ import { trackEvent } from '../lib/analytics/track';
 LogBox.ignoreLogs(['MixpanelReactNative is not available']);
 
 function RootLayoutNav() {
-  const { user, isAdmin, loading, isResetVerified } = useAuth();
+  const { user, isAdmin, loading, isResetVerified, refreshUser } = useAuth();
   const { toast, hideToast, showToast, isConnected } = useApp();
   const segments = useSegments();
   const router = useRouter();
+  const navigationState = useRootNavigationState();
+  const isNavigationReady = navigationState?.key;
   
   // Deep linking pending state
   const url = Linking.useURL();
@@ -46,6 +49,9 @@ function RootLayoutNav() {
 
   // Network Status State
   const [showNoInternetPage, setShowNoInternetPage] = useState(false);
+
+  // Prevent infinite redirect loops
+  const lastRedirectRef = useRef<string | null>(null);
 
   useEffect(() => {
     checkAppConfig();
@@ -100,13 +106,20 @@ function RootLayoutNav() {
     }
   };
 
+  const hasAttemptedRefreshRef = useRef(false);
+
   useEffect(() => {
     if (isConnected === false) {
-      if (loading || !user || !user.is_onboarded) {
+      if (loading || !user || !(user as any).is_onboarded) {
         setShowNoInternetPage(true);
       }
     } else if (isConnected === true) {
       setShowNoInternetPage(false);
+      // If internet is back and we don't have a user yet, try to refresh the session ONCE
+      if (!user && !loading && !hasAttemptedRefreshRef.current) {
+        hasAttemptedRefreshRef.current = true;
+        refreshUser();
+      }
     }
   }, [isConnected, loading, user]);
 
@@ -120,7 +133,7 @@ function RootLayoutNav() {
         const targetRoute = `/${parsed.path}`;
 
         // If ready to navigate right now
-        if (user && user.is_onboarded) {
+        if (user && (user as any).is_onboarded) {
           router.push(targetRoute as any); // use push instead of replace to allow back button to feed
         } else {
           // Save for later once they log in and onboard
@@ -147,11 +160,16 @@ function RootLayoutNav() {
     }
   }, [user]);
 
-  // Track page views
+  // Track page views and reset redirect ref
   useEffect(() => {
     if (segments.length > 0) {
       const pageName = segments.join('/');
       trackEvent('page_view', { page: pageName });
+
+      // If we've reached the destination we were trying to redirect to, clear the ref
+      if (segments[0] === lastRedirectRef.current?.replace('/', '')) {
+        lastRedirectRef.current = null;
+      }
 
       if (segments[0] === 'meditation') {
         trackEvent('meditation_started');
@@ -163,20 +181,34 @@ function RootLayoutNav() {
     if (loading) return;
 
     const inAuthGroup = segments[0] === '(tabs)' || segments[0] === 'coming-soon';
-    const inProtectedRoute = ['chat', 'routine', 'notifications', 'post', 'profile', 'beats', 'community', 'meditation', 'journal', 'articles', 'tasks', 'yoga', 'products', 'pulse'].includes(segments[0]);
+    const inProtectedRoute = ['chat', 'routine', 'notifications', 'post', 'profile', 'beats', 'community', 'meditation', 'journal', 'articles', 'tasks', 'yoga', 'products', 'pulse', 'maya', 'subscription', 'games', 'events'].includes(segments[0]);
     const isAuthRoute = ['login', 'register', 'verify-otp', 'reset-password'].includes(segments[0]);
 
-if (!user) {
-  // BLOCK redirects during entire reset flow
-  if (segments[0] === 'reset-password') {
-    return;
-  }
+    if (!user) {
+      // BLOCK redirects during entire reset flow
+      if (segments[0] === 'reset-password') {
+        return;
+      }
 
-  if (inAuthGroup || inProtectedRoute || segments[0] === 'setup-profile' || segments[0] === 'onboarding-communities') {
-    router.replace('/login');
-  }
-} else {
-      // User is logged in. Check verification (Draft User status).
+      if (isAuthRoute) {
+        // Only clear the ref if we have actually landed on an auth route
+        if (segments[0] === lastRedirectRef.current?.replace('/', '')) {
+          lastRedirectRef.current = null;
+        }
+        return;
+      }
+
+      // REDIRECT TO LOGIN: if at root OR in a protected area
+      if (!segments[0] || inAuthGroup || inProtectedRoute || segments[0] === 'setup-profile' || segments[0] === 'onboarding-communities') {
+        if (isNavigationReady && lastRedirectRef.current !== '/login') {
+          lastRedirectRef.current = '/login';
+          requestAnimationFrame(() => {
+            router.replace('/login');
+          });
+        }
+      }
+    } else {
+      // User is logged in.
       
       // If they are in the middle of a reset password flow, let them be.
       if (segments[0] === 'reset-password' && isResetVerified) {
@@ -184,27 +216,31 @@ if (!user) {
       }
       
       if (!user.is_verified) {
-        if (segments[0] !== 'setup-profile') {
+        if (segments[0] !== 'setup-profile' && isNavigationReady && lastRedirectRef.current !== '/setup-profile') {
+          lastRedirectRef.current = '/setup-profile';
           router.replace('/setup-profile');
         }
       } else if (!user.is_onboarded) {
-        if (segments[0] !== 'onboarding-communities') {
+        if (segments[0] !== 'onboarding-communities' && isNavigationReady && lastRedirectRef.current !== '/onboarding-communities') {
+          lastRedirectRef.current = '/onboarding-communities';
           router.replace('/onboarding-communities');
         }
       } else {
         // User is completely onboarded.
         if (!inAuthGroup && !inProtectedRoute && segments[0] !== 'onboarding-communities' && segments[0] !== 'setup-profile' && segments[0] !== 'reset-password') {
-          router.replace('/(tabs)');
+          if (isNavigationReady && lastRedirectRef.current !== '/(tabs)') {
+            lastRedirectRef.current = '/(tabs)';
+            router.replace('/(tabs)');
+          }
 
           // Process pending deep link after landing on feed
           if (pendingDeepLinkRoute) {
             setTimeout(() => {
               router.push(pendingDeepLinkRoute as any);
               setPendingDeepLinkRoute(null);
-            }, 100); // slight delay to ensure tabs are mounted
+            }, 100);
           }
         } else if (segments[0] === '(tabs)' && pendingDeepLinkRoute) {
-          // If already on tabs but a pending link exists (e.g. from background login flow)
           setTimeout(() => {
             router.push(pendingDeepLinkRoute as any);
             setPendingDeepLinkRoute(null);
@@ -212,30 +248,11 @@ if (!user) {
         }
       }
     }
-  }, [user, isAdmin, loading, segments, pendingDeepLinkRoute]);
+  }, [user, isAdmin, loading, segments, pendingDeepLinkRoute, isNavigationReady]);
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        {/* <ActivityIndicator size="large" color={colors.primary} /> */}
-      </View>
-    );
-  }
-
-  if (isMaintenanceMode) {
-    return <MaintenanceScreen message={maintenanceMessage} />;
-  }
-
-  if (showNoInternetPage) {
-    return (
-      <View style={{ flex: 1 }}>
-        <NoInternetScreen onRetry={() => NetInfo.fetch()} />
-      </View>
-    );
-  }
-
+  // 3. Render Logic
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <Toast 
         message={toast.message} 
         onHide={hideToast} 
@@ -251,57 +268,89 @@ if (!user) {
         onUpdate={handleUpdate}
         onDismiss={() => setShowUpdateModal(false)}
       />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="reset-password" />
-        <Stack.Screen name="verify-otp" />
-        <Stack.Screen name="setup-profile" />
-        <Stack.Screen name="onboarding-communities" />
-        <Stack.Screen name="coming-soon" />
-        <Stack.Screen name="(tabs)" />
-        {/* <Stack.Screen name="updates" /> */}
-        <Stack.Screen name="post/[id]" options={{ presentation: 'modal', headerShown: false }} />
-        <Stack.Screen name="profile/index" options={{ headerShown: false }} />
-        <Stack.Screen name="beats/[id]" options={{ headerShown: false, presentation: 'modal' }} />
-        <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="community/index" options={{ headerShown: false }} />
-        <Stack.Screen name="community/[id]" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="community/members/[id]" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="meditation/index" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="journal/index" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="journal/[id]" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="tasks/index" options={{ headerShown: false }} />
-        <Stack.Screen name="tasks/create" options={{ headerShown: false }} />
-        <Stack.Screen name="tasks/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="yoga/index" options={{ headerShown: false }} />
-        <Stack.Screen name="yoga/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="products/index" options={{ headerShown: false }} />
-        <Stack.Screen name="articles/index" options={{ headerShown: false }} />
-        <Stack.Screen name="articles/[slug]" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="pulse/index" options={{ headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-    </>
+      
+      {isMaintenanceMode ? (
+        <MaintenanceScreen message={maintenanceMessage} />
+      ) : showNoInternetPage ? (
+        <View style={{ flex: 1 }}>
+          <NoInternetScreen onRetry={() => NetInfo.fetch()} />
+        </View>
+      ) : loading ? (
+        <View style={[StyleSheet.absoluteFill, styles.loadingContainer]}>
+          <CustomSplashScreen isReady={false} />
+        </View>
+      ) : (
+        <View style={{ flex: 1 }}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="login" options={{headerShown: false, animation: 'fade' }}/>
+            <Stack.Screen name="register" options={{headerShown: false, animation: 'fade' }}/>
+            <Stack.Screen name="reset-password" options={{headerShown: false, animation: 'fade' }}/>
+            <Stack.Screen name="verify-otp" options={{headerShown: false, animation: 'fade' }}/>
+            <Stack.Screen name="setup-profile" options={{headerShown: false, animation: 'fade' }}/>
+            <Stack.Screen name="onboarding-communities" options={{headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="coming-soon" options={{headerShown: false, animation: 'fade' }}/>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="post/[id]" options={{ presentation: 'modal', headerShown: false, animation: 'none'}} />
+            <Stack.Screen name="profile/index" options={{ headerShown: false, animation: 'none' }} />
+            <Stack.Screen name="beats/[id]" options={{ headerShown: false, presentation: 'modal', animation: 'fade' }} />
+            <Stack.Screen name="chat/[id]" options={{ headerShown: false, animation: 'none' }} />
+            <Stack.Screen name="community/index" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="community/[id]" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="community/members/[id]" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="meditation/index" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="journal/index" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="journal/[id]" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="tasks/index" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="tasks/create" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="tasks/[id]" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="yoga/index" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="yoga/[id]" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="articles/index" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="articles/[slug]" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="pulse/index" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="maya/index" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="maya/[id]" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="games" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="events/yoga" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="subscription/upgrade" options={{ headerShown: false, presentation: 'modal' }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          {((user && segments.length > 0 && segments[0] !== '(tabs)' && !['chat', 'routine', 'notifications', 'post', 'profile', 'beats', 'community', 'meditation', 'journal', 'articles', 'tasks', 'yoga', 'pulse', 'maya', 'subscription', 'games', 'events', 'setup-profile', 'onboarding-communities', 'login', 'register', 'verify-otp', 'reset-password'].includes(segments[0])) ||
+            (!user && segments.length > 0 && segments[0] === '(tabs)')
+          ) && (
+            <View style={[StyleSheet.absoluteFill, styles.loadingContainer]} />
+          )}
+        </View>
+      )}
+      
+      <CustomSplashScreen isReady={!loading} />
+    </View>
   );
 }
+
+import { GlobalErrorBoundary } from '@/components/GlobalErrorBoundary';
 
 export default function RootLayout() {
   useFrameworkReady();
 
   useEffect(() => {
-    initMixpanel();
+    // initMixpanel(); // Disabled temporarily to check if JS fallback breaks websockets
+    // trackEvent('app_open');
   }, []);
 
   return (
     <AuthProvider>
       <AppProvider>
-        <FeedProvider>
-          <RootLayoutNav />
-          <CustomSplashScreen />
-          <StatusBar style="dark" backgroundColor={colors.background} />
-          {/* <StatusBar style="dark" backgroundColor="transparent" translucent /> */}
-        </FeedProvider>
+        <SubscriptionProvider>
+          <FeedProvider>
+            <SessionProvider>
+              <GlobalErrorBoundary>
+                <RootLayoutNav />
+                <StatusBar style="dark" />
+              </GlobalErrorBoundary>
+            </SessionProvider>
+          </FeedProvider>
+        </SubscriptionProvider>
       </AppProvider>
     </AuthProvider>
   );

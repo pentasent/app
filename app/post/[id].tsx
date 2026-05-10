@@ -10,14 +10,17 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
-  SafeAreaView,
   Share,
   TextInput,
   Modal,
+  Pressable,
+  Animated,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
+import Constants from 'expo-constants';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase, useAuth } from '../../contexts/AuthContext';
 import { Post, Comment } from '../../types/database';
 import { borderRadius, colors, spacing } from '../../constants/theme';
@@ -51,11 +54,69 @@ import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 const { width, height } = Dimensions.get('window');
 
+const PostImageItem = React.memo(({ 
+  img, 
+  idx, 
+  isSingle, 
+  targetHeight, 
+  handleSizeFound, 
+  setFullScreenImage,
+  imageRatios 
+}: any) => {
+  const scale = useRef(new Animated.Value(1)).current;
+  const ratio = imageRatios[img.id];
+  const itemWidth = ratio ? Math.min(380 * ratio, width - 40) : 320;
+
+  const onPressIn = () => {
+    Animated.timing(scale, {
+      toValue: 0.97,
+      duration: 100,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 40,
+      friction: 7
+    }).start();
+  };
+
+  return (
+    <Animated.View key={img.id || `img-${idx}`} style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        onPress={() => {
+          // Small delay to let the tactile feedback feel intentional
+          setTimeout(() => {
+            setFullScreenImage(img.image_url);
+          }, 50);
+        }}
+      >
+        <FlexibleCustomImage
+          source={{ uri: getImageUrl(img.image_url) }}
+          onSizeFound={(r) => handleSizeFound(img.id, r)}
+          style={[
+            isSingle
+              ? styles.singleImage
+              : { ...styles.currentPostImage, height: targetHeight, width: itemWidth },
+            { backgroundColor: colors.borderLight },
+          ]}
+          resizeMode="cover"
+        />
+      </Pressable>
+    </Animated.View>
+  );
+});
+
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams();
   const postId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
-  const { user: currentUser } = useAuth(); // Use global auth state
+  const { user: currentUser, isAdmin } = useAuth(); // Use global auth state
   const { posts, updatePost, removePost, deletePost } = useFeed(); // Access global feed context
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -104,6 +165,10 @@ export default function PostDetailScreen() {
   const [imageRatios, setImageRatios] = useState<{ [key: string]: number }>({});
   const hasIncrementedView = useRef(false);
 
+  // Cinematic Transitions
+  const screenFade = useRef(new Animated.Value(0)).current;
+  const contentFade = useRef(new Animated.Value(0)).current;
+
   const handleSizeFound = (id: string, ratio: number) => {
     setImageRatios((prev) => {
       if (prev[id] === ratio) return prev;
@@ -121,6 +186,26 @@ export default function PostDetailScreen() {
   const realPostId = currentPost?.id || postId;
   const isUploadingPost = currentPost?.is_uploading || false;
 
+  useEffect(() => {
+    Animated.timing(screenFade, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  useEffect(() => {
+    if (!loading && currentPost) {
+      Animated.timing(contentFade, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      contentFade.setValue(0);
+    }
+  }, [loading, !!currentPost]);
+
   // Handle ID finalization (Note: Redirection removed to prevent UX-breaking slide animation)
   // The contextPost lookup with _tempId already keeps the UI updated seamlessly.
 
@@ -137,6 +222,42 @@ export default function PostDetailScreen() {
       }
     }
   }, [contextPost?.is_uploading, contextPost?.images?.length, contextPost?.views_count, postId]);
+
+  useEffect(() => {
+    if (!postId || postId.startsWith('temp-')) return;
+
+    const channel = supabase
+      .channel(`post-detail-${postId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'posts',
+          filter: `id=eq.${postId}`,
+        },
+        () => {
+          setPost(null);
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'posts',
+          filter: `id=eq.${postId}`,
+        },
+        (payload) => {
+          setPost((prev) => (prev ? { ...prev, ...payload.new } : null));
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [postId]);
 
   useEffect(() => {
     // Only fetch if we don't have a post OR if we have a post but it's not currently uploading
@@ -609,10 +730,12 @@ export default function PostDetailScreen() {
         setToastType('success');
         setToastMsg('Post deleted successfully');
 
-        // Delay navigation slightly for smooth transition
-        setTimeout(() => {
+        // Robust navigation failsafe
+        if (router.canGoBack()) {
+          router.back();
+        } else {
           router.replace('/(tabs)');
-        }, 1500);
+        }
       } else if (deleteTarget.type === 'comment' && deleteTarget.id) {
         const commentId = deleteTarget.id;
         await supabase.from('comments').delete().eq('id', commentId);
@@ -830,8 +953,8 @@ export default function PostDetailScreen() {
     setShowDeleteModal(true);
   };
 
-  const isOwner =
-    currentUser && currentPost && currentPost.user_id === currentUser.id;
+  const canManagePost =
+    currentUser && currentPost && (currentPost.user_id === currentUser.id || isAdmin);
 
   const renderNavBar = () => (
     <View style={styles.navBar}>
@@ -840,81 +963,28 @@ export default function PostDetailScreen() {
       </TouchableOpacity>
       <Text style={styles.navTitle}>Post</Text>
       <View style={styles.rightNav}>
-        {isOwner ? (
-          <TouchableOpacity
-            onPress={() => setOptionsTarget({ type: 'post' })}
-            style={styles.navIcon}
-          >
-            <MoreVertical size={24} color={colors.text} />
-          </TouchableOpacity>
-        ) : (
-          // <View style={{ width: 24 }} />
-          <TouchableOpacity style={styles.navIcon}>
-            <MoreVertical size={24} color={colors.background} />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity 
+          onPress={() => canManagePost && setOptionsTarget({ type: 'post' })}
+          style={[styles.navIcon, !canManagePost && { opacity: 0 }]}
+          disabled={!canManagePost}
+        >
+          <MoreVertical size={24} color={colors.text} />
+        </TouchableOpacity>
       </View>
     </View>
   );
 
-  if (loading && !currentPost) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-        <StatusBar style="dark" backgroundColor="transparent" translucent />
-        <Stack.Screen options={{ headerShown: false }} />
-        {renderNavBar()}
-        <ScrollView style={{ flex: 1 }}>
-          <FeedPostShimmer />
-          <View style={{ padding: 16 }}>
-            <CommentShimmer />
-            <CommentShimmer />
-            <CommentShimmer />
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  if (!currentPost) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-        <StatusBar style="dark" backgroundColor="transparent" translucent />
-        <Stack.Screen options={{ headerShown: false }} />
-        {renderNavBar()}
-        <View style={styles.center}>
-          <Text
-            style={{
-              color: colors.text,
-              textAlign: 'center',
-              marginHorizontal: 30,
-            }}
-          >
-            Post not found, might be removed by the creator.
-          </Text>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={{ marginTop: 16 }}
-          >
-            <Text style={{ color: colors.primary, fontWeight: '600' }}>
-              Go Back
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
+  // Consolidated Root Return for high-fidelity stability
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <StatusBar style="dark" backgroundColor="transparent" translucent />
-      <Stack.Screen options={{ headerShown: false }} />
+    <View style={[styles.container, { paddingTop: Constants.statusBarHeight }]}>
+      <StatusBar style="dark" />
       <Toast
         message={toastMsg}
         onHide={() => setToastMsg(null)}
         type={toastType}
       />
 
-      {/* Navbar */}
+      {/* Persistent NavBar to prevent jumps */}
       {renderNavBar()}
 
       {/* Options Modal */}
@@ -991,7 +1061,7 @@ export default function PostDetailScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-
+ 
       {/* Edit Post Dialog */}
       <EditPostDialog
         visible={showEditModal}
@@ -1029,14 +1099,50 @@ export default function PostDetailScreen() {
         </View>
       </Modal>
 
-      <View style={{ flex: 1 }}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Post Content */}
-          <View style={styles.currentPostContainer}>
+      {loading && !currentPost ? (
+        <View style={{ flex: 1 }}>
+          <ScrollView 
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <FeedPostShimmer />
+            <View style={{ paddingHorizontal: spacing.lg }}>
+              <CommentShimmer />
+              <CommentShimmer />
+              <CommentShimmer />
+            </View>
+          </ScrollView>
+        </View>
+      ) : !currentPost ? (
+        <View style={styles.notFoundWrapper}>
+          <View style={styles.notFoundContainer}>
+            <View style={styles.iconCircle}>
+              <Trash2 size={32} color={colors.textMuted} strokeWidth={1.5} />
+            </View>
+            <Text style={styles.notFoundTitle}>Post Unavailable</Text>
+            <Text style={styles.notFoundDescription}>
+              This post has been deleted or is no longer available to view.
+            </Text>
+            <TouchableOpacity 
+              onPress={() => router.back()} 
+              style={styles.pillButton}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pillButtonText}>Return to Feed</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={{ flex: 1 }}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews={Platform.OS === 'android'}
+          >
+            {/* Post Content */}
+            <View style={styles.currentPostContainer}>
             <View style={styles.header}>
               <Image
                 source={{ uri: getImageUrl(currentPost.user?.avatar_url) }}
@@ -1046,26 +1152,6 @@ export default function PostDetailScreen() {
                 <Text style={styles.username}>
                   {currentPost.user?.name || 'Anonymous'}
                 </Text>
-                {(currentPost as any).is_uploading && (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        color: colors.primary,
-                        fontWeight: '600',
-                      }}
-                    >
-                      {currentPost.is_edited ? 'Updating...' : 'Uploading...'}
-                    </Text>
-                    <DotsLoader color={colors.primary} size={4} />
-                  </View>
-                )}
                 <View style={styles.metaRow}>
                   {currentPost.community && (
                     <Text style={styles.communityName}>
@@ -1078,6 +1164,32 @@ export default function PostDetailScreen() {
                       : formatDate(currentPost.created_at)}
                     {currentPost.is_edited && ' • Edited'}
                   </Text>
+
+                  {/* Status Indicator: Integrated into metaRow to prevent layout jumps */}
+                  {(currentPost as any).is_uploading && (
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        marginLeft: 8,
+                      }}
+                    >
+                      <View style={{ width: 1, height: 10, backgroundColor: colors.border, marginHorizontal: 4 }} />
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: colors.primary,
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {currentPost.is_edited ? 'Updating' : 'Uploading'}
+                      </Text>
+                      <DotsLoader color={colors.primary} size={3} />
+                    </View>
+                  )}
                 </View>
               </View>
             </View>
@@ -1114,18 +1226,7 @@ export default function PostDetailScreen() {
 
               const isSingle = displayImages.length === 1;
 
-              const targetHeight = (() => {
-                if (isSingle) return undefined;
-                let maxH = 250;
-                displayImages.forEach((img: any) => {
-                  const r = imageRatios[img.id];
-                  if (r) {
-                    const h = 300 / r;
-                    if (h > maxH) maxH = h;
-                  }
-                });
-                return Math.min(maxH, 500);
-              })();
+              const targetHeight = isSingle ? undefined : 380;
 
               return (
                 <ScrollView
@@ -1134,22 +1235,16 @@ export default function PostDetailScreen() {
                   style={styles.imageScroll}
                 >
                   {displayImages.map((img: any, idx: number) => (
-                    <TouchableOpacity
+                    <PostImageItem
                       key={img.id || `img-${idx}`}
-                      onPress={() => setFullScreenImage(img.image_url)}
-                    >
-                      <FlexibleCustomImage
-                        source={{ uri: getImageUrl(img.image_url) }}
-                        onSizeFound={(r) => handleSizeFound(img.id, r)}
-                        style={[
-                          isSingle
-                            ? styles.singleImage
-                            : { ...styles.currentPostImage, height: targetHeight },
-                          { backgroundColor: colors.borderLight },
-                        ]}
-                        resizeMode={isSingle ? 'cover' : 'contain'}
-                      />
-                    </TouchableOpacity>
+                      img={img}
+                      idx={idx}
+                      isSingle={isSingle}
+                      targetHeight={targetHeight}
+                      handleSizeFound={handleSizeFound}
+                      setFullScreenImage={setFullScreenImage}
+                      imageRatios={imageRatios}
+                    />
                   ))}
                 </ScrollView>
               );
@@ -1163,10 +1258,10 @@ export default function PostDetailScreen() {
                 <Heart
                   size={20}
                   color={
-                    currentPost.user_has_liked ? colors.error : colors.textMuted
+                    currentPost.user_has_liked ? colors.primary : colors.textMuted
                   }
                   fill={
-                    currentPost.user_has_liked ? colors.error : 'transparent'
+                    currentPost.user_has_liked ? colors.primary : 'transparent'
                   }
                 />
                 <Text style={styles.actionText}>
@@ -1202,6 +1297,7 @@ export default function PostDetailScreen() {
             onLikeComment={handleLikeComment}
             onReply={(comment) => setReplyingTo(comment)}
             currentUserId={currentUser?.id}
+            isAdmin={isAdmin}
             onOptions={(comment) =>
               setOptionsTarget({ type: 'comment', data: comment })
             }
@@ -1261,6 +1357,7 @@ export default function PostDetailScreen() {
           </View>
         </KeyboardShiftView>
       </View>
+    )}
 
       {/* Confirmation Modals */}
       <ConfirmationModal
@@ -1272,7 +1369,7 @@ export default function PostDetailScreen() {
         onConfirm={confirmDeletePost}
         onCancel={() => setShowDeleteModal(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1302,7 +1399,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.xxl,
+    // paddingTop: spacing.xxl,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     zIndex: 1,
   },
@@ -1366,7 +1464,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   body: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.text,
     lineHeight: 24,
     marginBottom: 8,
@@ -1375,8 +1473,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   currentPostImage: {
-    width: 300,
-    height: 300,
+    width: 320,
+    height: 380,
     borderRadius: 12,
     marginRight: 12,
   },
@@ -1610,5 +1708,58 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.error,
     fontWeight: '600',
+  },
+  notFoundWrapper: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  notFoundContainer: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  notFoundTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  notFoundDescription: {
+    fontSize: 15,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  pillButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+    borderRadius: 30,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  pillButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

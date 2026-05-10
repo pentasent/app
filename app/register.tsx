@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
 import { Button } from '../components/Button';
@@ -33,12 +33,33 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [referralCode, setReferralCode] = useState('P-APP');
+  const [timer, setTimer] = useState(0);
+
   const { register } = useAuth();
   const { addNotification } = useApp();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [referralCode, setReferralCode] = useState('P-APP');
-  const [timer, setTimer] = useState(0);
+  const isNavigating = React.useRef(false);
+
+  const safePush = (route: string) => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
+    // @ts-ignore
+    router.push(route);
+    setTimeout(() => {
+      isNavigating.current = false;
+    }, 500);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setErrorMsg(null);
+    }, [])
+  );
 
   const TIMER_KEY = "signup_timer_end";
 
@@ -133,7 +154,7 @@ export default function RegisterScreen() {
       trackEvent('user_signup');
 
       // Route to OTP verification
-      router.push(`/verify-otp?email=${encodeURIComponent(email)}` as any);
+      router.push(`/verify-otp?email=${encodeURIComponent(email)}&type=signup` as any);
 
     } catch (error: any) {
       setErrorMsg(error.message || 'Registration failed');
@@ -216,7 +237,7 @@ export default function RegisterScreen() {
               />
 
               <Button
-                title={timer > 0 ? `Resend in ${formatTime(timer)}` : "Create Account"}
+                title={timer > 0 ? `Register in ${formatTime(timer)}` : "Create Account"}
                 onPress={handleRegister}
                 loading={loading}
                 disabled={timer > 0}
@@ -232,7 +253,14 @@ export default function RegisterScreen() {
 
               <Button
                 title="Have an account? Login"
-                onPress={() => router.back()}
+                onPress={() => {
+                  if (isNavigating.current) return;
+                  isNavigating.current = true;
+                  router.back();
+                  setTimeout(() => {
+                    isNavigating.current = false;
+                  }, 500);
+                }}
                 variant="outline"
               />
             </View>

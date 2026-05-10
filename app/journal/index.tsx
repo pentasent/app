@@ -1,17 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, ActivityIndicator, SafeAreaView, DeviceEventEmitter } from 'react-native';
 import { useRouter } from 'expo-router';
 import crashlytics from '@/lib/crashlytics';
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
-import { ArrowLeft, Plus, BookOpen, Calendar, ChevronRight, Home, LayoutGrid } from 'lucide-react-native';
+import { Plus, BookOpen, LayoutGrid } from 'lucide-react-native';
 import { UserJournal } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 import { StatusBar } from 'expo-status-bar';
 import { JournalCardShimmer } from '@/components/shimmers/JournalCardShimmer';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { Sparkles, AlertCircle } from 'lucide-react-native';
 
-const ITEMS_PER_PAGE = 30;
+const ITEMS_PER_PAGE = 20;  
 
 type JournalSection = {
     title: string;
@@ -26,9 +28,12 @@ export default function JournalScreen() {
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
+    const { subscription, isExpired, plan, limits } = useSubscription();
+    const [todayCount, setTodayCount] = useState(0);
 
     const fetchJournals = useCallback(async (pageNumber: number, refresh = false) => {
         if (!user) return;
+        const startTime = Date.now();
         try {
             if (pageNumber === 0) setLoading(true);
             else setLoadingMore(true);
@@ -44,27 +49,48 @@ export default function JournalScreen() {
             if (error) throw error;
 
             if (data) {
-                if (data.length < ITEMS_PER_PAGE) {
-                    setHasMore(false);
-                } else {
-                    setHasMore(true);
-                }
+                const isNoMore = data.length < ITEMS_PER_PAGE;
+                if (isNoMore) setHasMore(false);
+                else setHasMore(true);
 
                 setSections(currentSections => {
-                    const newJournals = refresh ? data : [...(pageNumber === 0 ? [] : currentSections.flatMap(s => s.data)), ...data];
+                    // Combine old and new entries
+                    const allEntries = refresh 
+                        ? data 
+                        : [...currentSections.flatMap(s => s.data), ...data];
 
-                    // Group by Month/Year
-                    const grouped = newJournals.reduce((acc: Record<string, UserJournal[]>, journal) => {
+                    // Use a Map for O(N) grouping
+                    const groupedMap = new Map<string, UserJournal[]>();
+                    
+                    allEntries.forEach(journal => {
                         const date = new Date(journal.created_at);
-                        const title = format(date, 'MMMM yyyy'); // e.g. "October 2023"
-                        if (!acc[title]) acc[title] = [];
-                        acc[title].push(journal);
-                        return acc;
-                    }, {});
+                        
+                        // Timezone-safe normalization (Date-Month-Year only)
+                        const now = new Date();
+                        const todayStr = format(now, 'yyyy-MM-dd');
+                        
+                        const yesterday = new Date();
+                        yesterday.setDate(yesterday.getDate() - 1);
+                        const yesterdayStr = format(yesterday, 'yyyy-MM-dd');
 
-                    return Object.keys(grouped).map(title => ({
+                        const journalDateStr = format(date, 'yyyy-MM-dd');
+
+                        let title = format(date, 'MMMM do, yyyy');
+                        if (journalDateStr === todayStr) title = 'Today';
+                        else if (journalDateStr === yesterdayStr) title = 'Yesterday';
+                        
+                        if (!groupedMap.has(title)) {
+                            groupedMap.set(title, []);
+                        }
+                        groupedMap.get(title)?.push(journal);
+                    });
+
+                    // Convert Map back to SectionList format
+                    // Since allEntries was already sorted by created_at DESC, 
+                    // the Map insertion order (for modern JS) or a quick sort will keep them correct.
+                    return Array.from(groupedMap.entries()).map(([title, data]) => ({
                         title,
-                        data: grouped[title],
+                        data
                     }));
                 });
             }
@@ -73,17 +99,43 @@ export default function JournalScreen() {
             console.log('[ERROR]:', 'Error fetching journals:', error);
             crashlytics().recordError(error as any);
         } finally {
-            setLoading(false);
-            setLoadingMore(false);
+            const minimumLoadTime = 800; // Slightly faster for premium feel
+            const elapsed = Date.now() - startTime;
+            const delay = Math.max(0, minimumLoadTime - elapsed);
+            
+            setTimeout(() => {
+                setLoading(false);
+                setLoadingMore(false);
+            }, delay);
+        }
+    }, [user]);
+
+    const fetchTodayCount = useCallback(async () => {
+        if (!user) return;
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        
+        const { count, error } = await supabase
+            .from('user_journals')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .gte('created_at', todayStart.toISOString());
+            
+        if (!error) {
+            setTodayCount(count || 0);
         }
     }, [user]);
 
     // Initial fetch
     useEffect(() => {
+        setPage(0);
         fetchJournals(0, true);
+        fetchTodayCount();
 
         const subscription = DeviceEventEmitter.addListener('journal_update', () => {
             fetchJournals(0, true);
+            fetchTodayCount();
         });
 
         return () => {
@@ -91,12 +143,26 @@ export default function JournalScreen() {
         };
     }, [user, fetchJournals]);
 
+    const isNavigating = useRef(false);
+    const safePush = (route: string) => {
+        if (isNavigating.current) return;
+        isNavigating.current = true;
+        // @ts-ignore
+        router.push(route);
+        setTimeout(() => {
+            isNavigating.current = false;
+        }, 500);
+    };
+
     const loadMore = () => {
         if (!hasMore || loadingMore) return;
         const nextPage = page + 1;
         setPage(nextPage);
         fetchJournals(nextPage);
     };
+
+    const isLimitReached = limits ? todayCount >= limits.journal.entries_per_day && limits.journal.entries_per_day !== -1 : false;
+    const canCreate = !isExpired && !!subscription && !isLimitReached;
 
     const renderItem = ({ item }: { item: UserJournal }) => {
         const date = new Date(item.created_at);
@@ -106,7 +172,7 @@ export default function JournalScreen() {
         return (
             <TouchableOpacity
                 style={styles.card}
-                onPress={() => router.push(`/journal/${item.id}`)}
+                onPress={() => safePush(`/journal/${item.id}`)}
                 activeOpacity={0.7}
             >
                 <View style={styles.dateColumn}>
@@ -140,7 +206,7 @@ export default function JournalScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" backgroundColor={colors.background} />
+            <StatusBar style="dark" />
 
             {/* Header */}
             <View style={styles.header}>
@@ -151,11 +217,50 @@ export default function JournalScreen() {
                     </View>
                     <TouchableOpacity
                         style={styles.homeButton}
-                        onPress={() => router.push('/(tabs)/explore')}
+                        onPress={() => safePush('/(tabs)/explore')}
                     >
                         <LayoutGrid size={24} color={colors.primary} />
                     </TouchableOpacity>
                 </View>
+
+                {/* Subscription Expired Card */}
+                {(isExpired || !subscription) && (
+                    <TouchableOpacity 
+                        style={styles.expiredCard}
+                        onPress={() => safePush('/subscription/upgrade')}
+                        activeOpacity={0.9}
+                    >
+                        <View style={styles.expiredIconContainer}>
+                            <AlertCircle size={20} color={colors.error} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.expiredTitle}>Subscription Expired</Text>
+                            <Text style={styles.expiredSubtitle}>Please renew your plan to continue writing unlimited entries.</Text>
+                        </View>
+                        <View style={styles.renewBadge}>
+                            <Text style={styles.renewText}>RENEW</Text>
+                        </View>
+                    </TouchableOpacity>
+                )}
+
+                {/* Daily Limit Reached Card */}
+                {!isExpired && subscription && isLimitReached && (
+                    <View style={styles.limitCard}>
+                        <View style={styles.limitIconContainer}>
+                            <Sparkles size={20} color="#F59E0B" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.limitTitle}>Daily Limit Reached</Text>
+                            <Text style={styles.limitSubtitle}>You've used all your journal entries for today. Upgrade for more!</Text>
+                        </View>
+                        <TouchableOpacity 
+                            style={styles.upgradeBtn}
+                            onPress={() => safePush('/subscription/upgrade')}
+                        >
+                            <Text style={styles.upgradeBtnText}>UPGRADE</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
 
             {loading ? (
@@ -191,9 +296,15 @@ export default function JournalScreen() {
                             <Text style={styles.emptyText}>Start your first journal entry.</Text>
                             <TouchableOpacity
                                 style={styles.emptyButton}
-                                onPress={() => router.push('/journal/new')}
+                                onPress={() => {
+                                    if (canCreate) {
+                                        safePush('/journal/new');
+                                    } else {
+                                        safePush('/subscription/upgrade');
+                                    }
+                                }}
                             >
-                                <Text style={styles.emptyButtonText}>Write Now</Text>
+                                <Text style={styles.emptyButtonText}>{canCreate ? 'Write Now' : 'Manage Subscription'}</Text>
                             </TouchableOpacity>
                         </View>
                     }
@@ -211,21 +322,36 @@ export default function JournalScreen() {
                                 )}
                             </TouchableOpacity>
                         ) : (
-                            sections.length > 0 ? <View style={{ height: 40 }} /> : null
+                            sections.length > 0 ? (
+                                <View style={styles.footerInfo}>
+                                    <View style={styles.footerDivider} />
+                                    <Text style={styles.footerNoMore}>No more journal entries.</Text>
+                                    {canCreate && (
+                                        <TouchableOpacity 
+                                           onPress={() => safePush('/journal/new')}
+                                           style={styles.footerCreateBtn}
+                                        >
+                                            <Text style={styles.footerCreateText}>Create New</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            ) : null
                         )
                     }
                 />
             )}
             {/* Floating Action Button */}
-            <View style={styles.fabContainer} pointerEvents="box-none">
-                <TouchableOpacity
-                    style={styles.fab}
-                    activeOpacity={0.8}
-                    onPress={() => router.push('/journal/new')}
-                >
-                    <Plus size={24} color="#FFF" strokeWidth={2.5} />
-                </TouchableOpacity>
-            </View>
+            {canCreate && (
+                <View style={styles.fabContainer} pointerEvents="box-none">
+                    <TouchableOpacity
+                        style={styles.fab}
+                        activeOpacity={0.8}
+                        onPress={() => safePush('/journal/new')}
+                    >
+                        <Plus size={24} color="#FFF" strokeWidth={2.5} />
+                    </TouchableOpacity>
+                </View>
+            )}
         </SafeAreaView>
     );
 }
@@ -254,6 +380,89 @@ const styles = StyleSheet.create({
     headerSubtitle: {
         fontSize: 14,
         color: colors.textLight,
+        marginBottom: spacing.md,
+    },
+    expiredCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.error + '10',
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.error + '20',
+        marginTop: spacing.sm,
+    },
+    expiredIconContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: colors.error + '15',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: spacing.md,
+    },
+    expiredTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: colors.error,
+    },
+    expiredSubtitle: {
+        fontSize: 12,
+        color: colors.textLight,
+        marginTop: 2,
+    },
+    renewBadge: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        backgroundColor: colors.error,
+        borderRadius: 20,
+        marginLeft: spacing.sm,
+    },
+    renewText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#FFF',
+    },
+    limitCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F59E0B' + '10',
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: '#F59E0B' + '20',
+        marginTop: spacing.sm,
+    },
+    limitIconContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F59E0B' + '15',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: spacing.md,
+    },
+    limitTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#F59E0B',
+    },
+    limitSubtitle: {
+        fontSize: 12,
+        color: colors.textLight,
+        marginTop: 2,
+    },
+    upgradeBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        backgroundColor: '#F59E0B',
+        borderRadius: 20,
+        marginLeft: spacing.sm,
+    },
+    upgradeBtnText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#FFF',
     },
     homeButton: {
         padding: 8,
@@ -394,5 +603,32 @@ const styles = StyleSheet.create({
     loadMoreText: {
         color: colors.primary,
         fontWeight: '600',
+    },
+
+    // Footer Info
+    footerInfo: {
+        alignItems: 'center',
+        paddingVertical: spacing.xl,
+        paddingHorizontal: spacing.lg,
+    },
+    footerDivider: {
+        width: 40,
+        height: 1,
+        backgroundColor: colors.border,
+        marginBottom: spacing.md,
+    },
+    footerNoMore: {
+        fontSize: 14,
+        color: colors.textLight,
+        marginBottom: spacing.sm,
+    },
+    footerCreateBtn: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+    },
+    footerCreateText: {
+        fontSize: 14,
+        color: colors.primary,
+        fontWeight: '700',
     },
 });

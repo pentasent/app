@@ -4,6 +4,7 @@ import { PostCard } from '../../components/feed/PostCard';
 import { colors, spacing, borderRadius } from '../../constants/theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { Plus, TrendingUp, LayoutGrid, Calendar } from 'lucide-react-native';
 import { Pressable } from 'react-native';
@@ -22,6 +23,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
 import crashlytics from '@/lib/crashlytics';
 import { ConfirmationModal } from '../../components/ConfirmationModal';
+import { MoodIcon } from '@/components/moods/MoodIcon';
+import { useSession } from '../../contexts/SessionContext';
 
 export default function CommunityFeedScreen() {
   const {
@@ -42,7 +45,11 @@ export default function CommunityFeedScreen() {
     selectedCommunityId,
     setSelectedCommunityId,
     refreshSinglePost,
-    deletePost
+    deletePost,
+    pendingPostsCount,
+    resetPendingPosts,
+    fetchPendingPosts,
+    lastNewPostTimestamp
   } = useFeed();
 
   const { user } = useAuth();
@@ -50,6 +57,7 @@ export default function CommunityFeedScreen() {
   const router = useRouter();
   const lastVisitedPostId = React.useRef<string | null>(null);
   const scrollY = React.useRef(new Animated.Value(0)).current;
+  const flatListRef = React.useRef<FlatList>(null);
 
   // Edit State
   const [editingPost, setEditingPost] = React.useState<any>(null);
@@ -66,15 +74,43 @@ export default function CommunityFeedScreen() {
   const [selectedInitialMood, setSelectedInitialMood] = useState<MoodTag | undefined>(undefined);
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState<Suggestion | null>(null);
-  const [lastSubmittedMood, setLastSubmittedMood] = useState<MoodTag>('neutral');
+  const [lastSubmittedMood, setLastSubmittedMood] = useState<MoodTag | null>(null);
+  const [isCheckinStatusLoading, setIsCheckinStatusLoading] = useState(true);
   const [canInteractWithMood, setCanInteractWithMood] = useState(true);
   const [showExitModal, setShowExitModal] = useState(false);
   const verticalText = "CHECKIN".split("").join("\n");
+ 
+  const { isFeedAlreadyLoaded, setFeedAlreadyLoaded } = useSession();
+
+  // Unified Direct Loading: Shimmer on first cold-load, Direct on return.
+  const [hasCompletedInitialLoad, setHasCompletedInitialLoad] = useState(isFeedAlreadyLoaded);
+
+  useEffect(() => {
+    // Once loading finishes for the very first time in this session, mark as loaded.
+    if (!loading && posts.length > 0 && !hasCompletedInitialLoad) {
+      setHasCompletedInitialLoad(true);
+      setFeedAlreadyLoaded(true);
+    }
+  }, [loading, posts.length, hasCompletedInitialLoad]);
 
   
+  const isNavigating = useRef(false);
+  const safeNavigate = (path: string, callback?: () => void) => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
+    if (callback) callback();
+    router.push(path as any);
+    setTimeout(() => {
+      isNavigating.current = false;
+    }, 500);
+  };
+
+  const [hasUserScrolled, setHasUserScrolled] = useState(false);
   useEffect(() => {
     const id = scrollY.addListener(({ value }) => {
-      const threshold = showCheckinCard ? 180 : 80;
+      if (value > 5 && !hasUserScrolled) setHasUserScrolled(true);
+      
+      const threshold = showCheckinCard ? 600 : 500;
       if (value > threshold && canInteractWithMood) {
         setCanInteractWithMood(false);
       } else if (value <= threshold && !canInteractWithMood) {
@@ -82,7 +118,29 @@ export default function CommunityFeedScreen() {
       }
     });
     return () => scrollY.removeListener(id);
-  }, [showCheckinCard, canInteractWithMood]);
+  }, [showCheckinCard, canInteractWithMood, hasUserScrolled]);
+
+  // Tab Bar Interaction: Double-tap feed icon to scroll up and refresh
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsubscribe = (navigation as any).addListener('tabPress', (e: any) => {
+      // If we are already on this screen, scroll to top and refresh
+      if (navigation.isFocused()) {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        onRefresh();
+        resetPendingPosts();
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, onRefresh]);
+
+  useEffect(() => {
+    // When filter changes, scroll to top smoothly to show new results
+    if (selectedCommunityId !== undefined) {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }
+  }, [selectedCommunityId]);
 
   const checkDailyStatus = async () => {
     if (!user) return;
@@ -132,6 +190,8 @@ export default function CommunityFeedScreen() {
     } catch (e:any) {
       crashlytics().recordError(e);
       console.log('[ERROR]:', 'Error checking checkin status:', e);
+    } finally {
+      setIsCheckinStatusLoading(false);
     }
   };
 
@@ -216,6 +276,7 @@ export default function CommunityFeedScreen() {
   };
 
   const MemoizedHeader = React.useMemo(() => {
+    if (isCheckinStatusLoading) return null;
     if (!showCheckinCard && !lastSubmittedMood) return null;
 
     return (
@@ -249,7 +310,22 @@ export default function CommunityFeedScreen() {
               onPress={() => router.push('/pulse')}
             >
               <View style={styles.actionCardContent}>
-                <Text style={styles.actionCardTitle}>Your mood today: {MOODS.find(m => m.tag === lastSubmittedMood)?.emoji} {lastSubmittedMood.charAt(0).toUpperCase() + lastSubmittedMood.slice(1)}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                  <Text style={styles.actionCardTitle}>Your mood today: </Text>
+                  {lastSubmittedMood && (
+                    <View style={{ marginHorizontal: 4 }}>
+                      <MoodIcon 
+                        tag={lastSubmittedMood} 
+                        color={MOODS.find(m => m.tag === lastSubmittedMood)?.color || colors.primary} 
+                        selected={true} 
+                        size={14} 
+                      />
+                    </View>
+                  )}
+                  <Text style={styles.actionCardTitle}>
+                    {lastSubmittedMood ? lastSubmittedMood.charAt(0).toUpperCase() + lastSubmittedMood.slice(1) : ''}
+                  </Text>
+                </View>
                 <Text style={styles.actionCardSubtitle}>See your pulse insights</Text>
               </View>
               <TrendingUp size={20} color={colors.primary} />
@@ -260,11 +336,18 @@ export default function CommunityFeedScreen() {
     );
   }, [showCheckinCard, lastSubmittedMood, scrollY, handleMoodSelect]);
 
+
   const handleCreatePost = async (dto: any) => {
     try {
-      await createPost(dto);
-      setToastType('success');
-      setToastMsg('Post created successfully');
+      const newPostId = await createPost(dto);
+      
+      if (newPostId) {
+        setIsCreatePostOpen(false);
+        // Small delay to ensure the store has finished its internal updates before navigation
+        setTimeout(() => {
+          router.push(`/post/${newPostId}`);
+        }, 100);
+      }
     } catch (e:any) {
       crashlytics().recordError(e);
       setToastType('error');
@@ -375,30 +458,76 @@ export default function CommunityFeedScreen() {
         />
       </View>
       <View style={{ flex: 1 }}>
-        {loading && !refreshing && posts.length === 0 ? (
+        {/* Smart Floating "New Posts" Indicator */}
+        {pendingPostsCount > 0 && (
+          <Animated.View 
+            style={[
+              styles.newPostsBannerContainer,
+              {
+                opacity: scrollY.interpolate({
+                  inputRange: [800, 1200],
+                  outputRange: [1, (pendingPostsCount > 10 || (lastNewPostTimestamp && Date.now() - lastNewPostTimestamp > 120000)) ? 1 : 0],
+                  extrapolate: 'clamp',
+                }),
+                transform: [{
+                  translateY: scrollY.interpolate({
+                    inputRange: [800, 1200],
+                    outputRange: [0, (pendingPostsCount > 10 || (lastNewPostTimestamp && Date.now() - lastNewPostTimestamp > 120000)) ? 0 : -20],
+                    extrapolate: 'clamp',
+                  })
+                }]
+              }
+            ]} 
+            pointerEvents="box-none"
+          >
+            <TouchableOpacity 
+              style={styles.newPostsBanner}
+              activeOpacity={0.9}
+              onPress={() => {
+                // Unified Action: Smooth Scroll to Top + Refresh
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                onRefresh();
+                resetPendingPosts();
+              }}
+            >
+              <TrendingUp size={16} color="#FFF" style={{ marginRight: 8 }} />
+              <Text style={styles.newPostsBannerText}>
+                {pendingPostsCount} new {pendingPostsCount === 1 ? 'post' : 'posts'}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+
+        {/* Shimmer on cold start OR when filtering (empty and loading) */}
+        {(loading && posts.length === 0) ? (
           <View style={{ flex: 1, backgroundColor: colors.background }}>
-            {/* <View style={{ height: 16, backgroundColor: colors.borderLight }} /> */}
-            {[1, 2, 3].map((key) => (
+            {[1, 2, 3, 4].map((key) => (
               <React.Fragment key={key}>
                 <FeedPostShimmer />
-                <View style={{ height: 2, backgroundColor: colors.card }} />
+                <View style={{ height: 2, backgroundColor: colors.borderLight }} />
               </React.Fragment>
             ))}
           </View>
         ) : (
           <Animated.FlatList
+            ref={flatListRef}
             data={posts}
             ListHeaderComponent={MemoizedHeader}
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { y: scrollY } } }],
               { useNativeDriver: true }
             )}
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: 10,
+            }}
             scrollEventThrottle={16}
-            keyExtractor={(item) => item.id}
-            initialNumToRender={5}
+            keyExtractor={(item) => (item as any)._stableKey || item.id || `temp-${item.created_at}`}
+            initialNumToRender={10}
             maxToRenderPerBatch={10}
-            windowSize={10}
-            removeClippedSubviews={Platform.OS === 'android'}
+            windowSize={11}
+            removeClippedSubviews={true}
             ItemSeparatorComponent={() => (
               <View style={{ height: 2, backgroundColor: colors.borderLight, width: '100%' }} />
             )}
@@ -411,21 +540,19 @@ export default function CommunityFeedScreen() {
                   <PostCard
                     post={post}
                     onPress={() => {
-                      lastVisitedPostId.current = post.id;
-                      viewPost(post.id);
-                      router.push(`/post/${post.id}`);
+                      safeNavigate(`/post/${post.id}`, () => {
+                        lastVisitedPostId.current = post.id;
+                        viewPost(post.id);
+                      });
                     }}
                     onLike={() => likePost(post.id)}
                     onComment={() => {
-                      lastVisitedPostId.current = post.id;
-                      viewPost(post.id);
-                      router.push(`/post/${post.id}`);
+                      safeNavigate(`/post/${post.id}`, () => {
+                        lastVisitedPostId.current = post.id;
+                        viewPost(post.id);
+                      });
                     }}
                     onShare={() => sharePost(post)}
-                  // onMore={post.id.startsWith('temp-') ? undefined : () => {
-                  //   setEditingPost(post);
-                  //   setIsEditModalOpen(true);
-                  // }}
                   />
                 </View>
               );
@@ -441,15 +568,18 @@ export default function CommunityFeedScreen() {
               ) : null
             }
             ListEmptyComponent={
-              <View style={styles.center}>
-                <Text style={styles.emptyText}>No posts yet. Be the first!</Text>
-              </View>
+              !loading && posts.length === 0 ? (
+                <View style={styles.center}>
+                  <Text style={styles.emptyText}>No posts yet. Be the first!</Text>
+                </View>
+              ) : null
             }
           />
         )}
+      </View>
+
 
         {/* Purely floating elements go here */}
-      </View>
 
       {/* Floating Action Button */}
       <View style={styles.fabContainer} pointerEvents="box-none">
@@ -477,7 +607,7 @@ export default function CommunityFeedScreen() {
         initialMood={selectedInitialMood}
       />
 
-      {activeSuggestion && (
+      {activeSuggestion && lastSubmittedMood && (
         <SuggestionCard
           visible={showSuggestion}
           suggestion={activeSuggestion}
@@ -489,12 +619,12 @@ export default function CommunityFeedScreen() {
 
       {/* Absolute Mini Mood Chip (Always Mounted for Smooth Transitions) */}
       <Animated.View
-        pointerEvents={showCheckinCard ? "auto" : "none"}
+        pointerEvents={(showCheckinCard && hasUserScrolled) ? "auto" : "none"}
         style={[
           styles.miniChip,
           {
-            opacity: showCheckinCard ? scrollY.interpolate({
-              inputRange: [60, 220],
+            opacity: (showCheckinCard && hasUserScrolled) ? scrollY.interpolate({
+              inputRange: [500, 700],
               outputRange: [0, 1],
               extrapolate: 'clamp'
             }) : 0,
@@ -502,14 +632,14 @@ export default function CommunityFeedScreen() {
             transform: [
               {
                 translateX: scrollY.interpolate({
-                  inputRange: [60, 220],
+                  inputRange: [500, 700],
                   outputRange: [120, 0],
                   extrapolate: 'clamp'
                 })
               },
               {
                 scale: scrollY.interpolate({
-                  inputRange: [60, 220],
+                  inputRange: [500, 700],
                   outputRange: [0.7, 1],
                   extrapolate: 'clamp'
                 })
@@ -673,5 +803,31 @@ const styles = StyleSheet.create({
     zIndex: 10,
     // borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+  },
+  newPostsBannerContainer: {
+    position: 'absolute',
+    top: 65, // Perfectly integrated beneath header
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 200,
+  },
+  newPostsBanner: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  newPostsBannerText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

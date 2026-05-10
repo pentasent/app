@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   RefreshControl,
   Platform
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../contexts/AppContext';
 import { supabase } from '../../contexts/AuthContext';
@@ -49,6 +50,7 @@ export default function ArticlesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const dataLoadedRef = useRef(false);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,10 +73,11 @@ export default function ArticlesScreen() {
     }
   };
 
-  const fetchArticles = useCallback(async (pageNum: number, search: string, tagSlug: string | null, append: boolean = false) => {
+  const fetchArticles = useCallback(async (pageNum: number, search: string, tagSlug: string | null, append: boolean = false, silent: boolean = false) => {
+    const startTime = Date.now();
     try {
-      if (pageNum === 0) setLoading(true);
-      else setLoadingMore(true);
+      if (pageNum === 0 && !silent) setLoading(true);
+      else if (pageNum > 0) setLoadingMore(true);
 
       let query = supabase
         .from('articles')
@@ -137,28 +140,63 @@ export default function ArticlesScreen() {
       }
 
       setHasMore(formattedArticles.length === PAGE_SIZE);
+
+      // Cache the first page if no filters are active
+      if (pageNum === 0 && !search && !tagSlug) {
+        const cacheData = {
+          articles: formattedArticles,
+          timestamp: Date.now()
+        };
+        AsyncStorage.setItem('articles_first_page', JSON.stringify(cacheData));
+      }
+      dataLoadedRef.current = true;
     } catch (error:any) {
       crashlytics().recordError(error);
       console.log('[ERROR]:', 'Error fetching articles:', error);
       showToast("Could not load articles. Reconnecting...", "error");
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setRefreshing(false);
+      // Ensure shimmer lasts at least 1 seconds
+      const minimumLoadTime = 1000;
+      const elapsed = Date.now() - startTime;
+      const delay = Math.max(0, minimumLoadTime - elapsed);
+      
+      setTimeout(() => {
+        setLoading(false);
+        setLoadingMore(false);
+        setRefreshing(false);
+      }, delay);
     }
   }, [showToast]);
 
-  // Initial Fetch
+  // Initial Fetch (Tags only, Articles handled by debounced effect)
   useEffect(() => {
     fetchTags();
-    fetchArticles(0, '', null, false);
-  }, [fetchArticles]);
+    
+    const loadCache = async () => {
+      try {
+        const cached = await AsyncStorage.getItem('articles_first_page');
+        if (cached && !searchQuery && !selectedTag) {
+          const { articles: cachedArticles } = JSON.parse(cached);
+          if (cachedArticles?.length) {
+            setArticles(cachedArticles);
+            dataLoadedRef.current = true;
+            setLoading(false);
+          }
+        }
+      } catch (e) {
+        console.log('[ERROR]:', 'Error loading articles cache:', e);
+      }
+    };
+    loadCache();
+  }, []);
 
   // Debounce Search & Tag change
   useEffect(() => {
     const timer = setTimeout(() => {
       setPage(0);
-      fetchArticles(0, searchQuery, selectedTag, false);
+      // If we already have data (from cache), do a silent refresh for the first page
+      const isSilent = page === 0 && dataLoadedRef.current && !searchQuery && !selectedTag;
+      fetchArticles(0, searchQuery, selectedTag, false, isSilent);
     }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery, selectedTag, fetchArticles]);
@@ -177,21 +215,29 @@ export default function ArticlesScreen() {
     }
   };
 
+  const isNavigating = useRef(false);
   const renderArticleCard = ({ item }: { item: any }) => {
     return (
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.9}
-        onPress={() => router.push({
-          pathname: `/articles/${item.slug}`,
-          params: { 
-            id: item.id, 
-            title: item.title, 
-            banner_image: item.banner_image,
-            description: item.description,
-            reading_time: item.reading_time
-          }
-        })}
+        onPress={() => {
+          if (isNavigating.current) return;
+          isNavigating.current = true;
+          router.push({
+            pathname: `/articles/${item.slug}`,
+            params: { 
+              id: item.id, 
+              title: item.title, 
+              banner_image: item.banner_image,
+              description: item.description,
+              reading_time: item.reading_time
+            }
+          });
+          setTimeout(() => {
+            isNavigating.current = false;
+          }, 500);
+        }}
       >
         <View style={styles.imageContainer}>
           {item.banner_image ? (

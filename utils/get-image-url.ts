@@ -9,7 +9,14 @@ const BUCKET = process.env.EXPO_PUBLIC_BUCKET || "avatars";
  * @param path Relative path (e.g. 'avatars/abc.jpg') or full HTTP URL
  * @returns Full URL string or placeholder if path is missing
  */
-export function getImageUrl(path: string | null | undefined) {
+interface ImageOptions {
+    width?: number;
+    height?: number;
+    quality?: number;
+    resize?: 'cover' | 'contain' | 'fill';
+}
+
+export function getImageUrl(path: string | null | undefined, options?: ImageOptions) {
     if (!path) {
         return `${STORAGE_BASE_URL}/${BUCKET}/placeholders/icon.png`;
     }
@@ -19,6 +26,9 @@ export function getImageUrl(path: string | null | undefined) {
         return path;
     }
     
-    // Prepend base URL and bucket
-    return `${STORAGE_BASE_URL}/${BUCKET}/${path}`;
+    // Use the path directly to respect the database's specific folder structure
+    const fullPath = `${BUCKET}/${path}`;
+
+    // Standard public URL (Transformation disabled to ensure 100% stability)
+    return `${STORAGE_BASE_URL}/${fullPath}`;
 }

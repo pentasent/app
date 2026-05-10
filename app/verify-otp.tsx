@@ -11,6 +11,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, useAuth } from '../contexts/AuthContext';
+import { useApp } from '../contexts/AppContext';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Toast } from '../components/Toast';
@@ -23,15 +24,27 @@ import crashlytics from '@/lib/crashlytics';
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
 export default function VerifyOtpScreen() {
-    const { email } = useLocalSearchParams<{ email: string }>();
+    const { email, type } = useLocalSearchParams<{ email: string; type: string }>();
     const [otp, setOtp] = useState('');
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [resendLoading, setResendLoading] = useState(false);
-    const { otpType } = useAuth();
+    const { user, refreshUser } = useAuth();
+    const { showToast } = useApp();
     const router = useRouter();
     const [isFocused, setIsFocused] = useState(true);
     const [timer, setTimer] = useState(0);
+    const isNavigating = React.useRef(false);
+
+    const safePush = (route: string) => {
+        if (isNavigating.current) return;
+        isNavigating.current = true;
+        // @ts-ignore
+        router.push(route);
+        setTimeout(() => {
+            isNavigating.current = false;
+        }, 500);
+    };
 
     const TIMER_KEY = "signup_timer_end";
 
@@ -88,17 +101,26 @@ export default function VerifyOtpScreen() {
 
         setLoading(true);
         try {
+            const verificationType = type || 'signup';
             const { data, error } = await supabase.auth.verifyOtp({
                 email: decodeURIComponent(email),
                 token: otp,
-                type: otpType as any,
+                type: verificationType as any,
             });
 
             if (error) throw error;
 
             // Verification successful. Auth session is created.
             trackEvent('user_verified');
-            router.replace('/(tabs)');
+            
+            // Show success message and wait a brief moment before redirecting
+            showToast('Email verified successfully!', 'success', 2000);
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Explicitly refresh user data to get the latest profile status
+            await refreshUser();
+
+            // RootLayoutNav will handle the redirection based on the fresh user state
             
 
         } catch (error: any) {
@@ -116,8 +138,9 @@ export default function VerifyOtpScreen() {
 
         setResendLoading(true);
         try {
+            const verificationType = type || 'signup';
             await supabase.auth.resend({
-                type: otpType as any,
+                type: verificationType as any,
                 email: decodeURIComponent(email)
             });
             const endTime = Date.now() + 120 * 1000;
@@ -229,7 +252,7 @@ export default function VerifyOtpScreen() {
 
                             <View style={styles.resendContainer}>
                                 <Button
-                                    title={timer > 0 ? `Resend again in - ${formatTime(timer)}` : "Resend Code"}
+                                    title={timer > 0 ? `Resend in ${formatTime(timer)}` : "Resend Code"}
                                     onPress={handleResend}
                                     variant="outline"
                                     disabled={timer > 0 || resendLoading}
@@ -246,7 +269,18 @@ export default function VerifyOtpScreen() {
                             /> */}
                             <Button
                                 title="Back to Registration"
-                                onPress={() => router.replace('/register')}
+                                onPress={() => {
+                                    if (isNavigating.current) return;
+                                    isNavigating.current = true;
+                                    if (router.canGoBack()) {
+                                        router.back();
+                                    } else {
+                                        router.replace('/register');
+                                    }
+                                    setTimeout(() => {
+                                        isNavigating.current = false;
+                                    }, 500);
+                                }}
                                 variant="ghost"
                                 style={{
                                     marginTop: spacing.md,

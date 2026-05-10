@@ -178,8 +178,8 @@ export const ArticleCommentSection = ({
                             >
                                 <Heart
                                     size={14}
-                                    color={item.user_has_liked ? colors.error : colors.textMuted}
-                                    fill={item.user_has_liked ? colors.error : 'transparent'}
+                                    color={item.user_has_liked ? colors.primary : colors.textMuted}
+                                    fill={item.user_has_liked ? colors.primary : 'transparent'}
                                 />
                                 <Text style={[styles.actionText, item.user_has_liked && styles.likedText]}>
                                     {Number(item.like_count || 0) > 0 ? item.like_count : 'Like'}
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     likedText: {
-        color: colors.error,
+        color: colors.primary,
     },
     repliesContainer: {
         marginTop: 12,

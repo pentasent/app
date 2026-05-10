@@ -1,7 +1,8 @@
 import { CustomImage as Image } from '@/components/CustomImage';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, SafeAreaView, FlatList, RefreshControl, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, FlatList, RefreshControl, Dimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import crashlytics from '@/lib/crashlytics';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext';

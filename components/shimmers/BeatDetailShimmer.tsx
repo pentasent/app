@@ -1,90 +1,137 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Dimensions, SafeAreaView, Platform } from 'react-native';
+import { View, StyleSheet, Animated, Dimensions, Platform, Easing } from 'react-native';
 import { colors, spacing, borderRadius } from '@/constants/theme';
-import { BlurView } from 'expo-blur';
-import { ChevronDown, Heart, Info, Play, Repeat, RotateCcw, RotateCw } from 'lucide-react-native';
+import { ChevronDown, Play, Repeat, RotateCcw, RotateCw, Music } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width } = Dimensions.get('window');
+const { width, height: screenHeight } = Dimensions.get('window');
+
+// Colors for a subtle, clean shimmer
+const BASE_COLOR = '#F5F5F5';
+const HIGHLIGHT_COLOR = '#FFFFFF';
+
+const ShimmerBox = ({ style, translateX, children }: { style: any, translateX: Animated.Value, children?: React.ReactNode }) => (
+    <View style={[style, { backgroundColor: BASE_COLOR, overflow: 'hidden' }]}>
+        <Animated.View
+            style={[
+                StyleSheet.absoluteFill,
+                {
+                    transform: [{ translateX }],
+                },
+            ]}
+        >
+            <LinearGradient
+                colors={[BASE_COLOR, HIGHLIGHT_COLOR, BASE_COLOR]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+            />
+        </Animated.View>
+        {children}
+    </View>
+);
 
 export const BeatDetailShimmer = () => {
-    const opacity = useRef(new Animated.Value(0.3)).current;
+    const insets = useSafeAreaInsets();
+    const translateX = useRef(new Animated.Value(-width)).current;
 
     useEffect(() => {
         Animated.loop(
-            Animated.sequence([
-                Animated.timing(opacity, {
-                    toValue: 0.7,
-                    duration: 1000,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(opacity, {
-                    toValue: 0.3,
-                    duration: 1000,
-                    useNativeDriver: true,
-                })
-            ])
+            Animated.timing(translateX, {
+                toValue: width,
+                duration: 1500,
+                easing: Easing.linear,
+                useNativeDriver: true,
+            })
         ).start();
-    }, [opacity]);
+    }, [translateX]);
 
     return (
         <View style={styles.container}>
-            <SafeAreaView style={styles.content}>
-                <Animated.View style={{ flex: 1, opacity }}>
-                    {/* Header */}
-                    <BlurView intensity={40} tint="light" style={styles.header}>
-                        <View style={styles.iconButton}>
-                            <ChevronDown size={28} color={colors.textMuted} />
-                        </View>
-                        <View style={styles.headerTitleShimmer} />
-                        <View style={{ width: 44 }} />
-                    </BlurView>
+            <StatusBar style="light" />
+            
+            {/* Background Atmosphere Shimmer - Same as real page */}
+            <View style={styles.backgroundBlurContainer}>
+                <ShimmerBox style={styles.blurredBackground} translateX={translateX} />
+                <LinearGradient
+                    colors={['rgba(0,0,0,0.1)', 'transparent', colors.background]}
+                    style={styles.topGradient}
+                    locations={[0, 0.4, 1]}
+                />
+            </View>
 
-                    {/* Main Cover Art */}
-                    <View style={styles.coverContainer}>
-                        <View style={styles.coverImageShimmer} />
+            <View style={[styles.content, { paddingTop: insets.top }]}>
+                {/* Header - Identical Position */}
+                <View style={styles.header}>
+                    <View style={styles.headerIconButton}>
+                        <ChevronDown size={28} color="rgba(255,255,255,0.2)" />
                     </View>
+                    <View style={styles.headerVisualizer}>
+                        {Array.from({ length: 12 }).map((_, i) => (
+                            <View 
+                                key={i} 
+                                style={[
+                                    styles.headerBar, 
+                                    { height: 12 + (i % 3) * 4, opacity: 0.1 }
+                                ]} 
+                            />
+                        ))}
+                    </View>
+                    <View style={{ width: 44 }} />
+                </View>
 
+                {/* Centered Cover Art Card - flex: 1 ensures identical centering */}
+                <View style={styles.coverCardContainer}>
+                    <ShimmerBox style={styles.coverCard} translateX={translateX} />
+                </View>
+
+                {/* Integrated Controls Section - Identical spacing */}
+                <View style={styles.controlsSection}>
                     {/* Track Info */}
                     <View style={styles.trackInfo}>
-                        <View>
-                            <View style={styles.titleShimmer} />
-                            <View style={styles.artistShimmer} />
+                        <View style={{ flex: 1 }}>
+                            <ShimmerBox style={styles.titleShimmer} translateX={translateX} />
+                            <ShimmerBox style={styles.artistShimmer} translateX={translateX} />
                         </View>
                     </View>
 
                     {/* Progress Bar */}
                     <View style={styles.progressContainer}>
-                        <View style={styles.sliderShimmer} />
+                        <ShimmerBox style={styles.sliderShimmer} translateX={translateX} />
                         <View style={styles.timeRow}>
-                            <View style={styles.timeTextShimmer} />
-                            <View style={styles.timeTextShimmer} />
+                            <ShimmerBox style={styles.timeTextShimmer} translateX={translateX} />
+                            <ShimmerBox style={styles.timeTextShimmer} translateX={translateX} />
                         </View>
                     </View>
 
                     {/* Controls */}
                     <View style={styles.controls}>
                         <View style={styles.controlButtonSmall}>
-                            <Repeat size={20} color={colors.border} />
+                            <Repeat size={20} color="rgba(0,0,0,0.05)" />
                         </View>
 
                         <View style={styles.controlButtonMedium}>
-                            <RotateCcw size={28} color={colors.border} />
+                            <RotateCcw size={28} color="rgba(0,0,0,0.05)" />
                         </View>
 
-                        <View style={styles.playPauseButtonShimmer}>
-                            <Play size={32} color={colors.border} fill={colors.border} style={{ marginLeft: 4 }} />
+                        <View style={styles.playPauseWrapper}>
+                            <ShimmerBox style={styles.playPauseButtonShimmer} translateX={translateX}>
+                                <Play size={32} color="white" fill="white" style={{ marginLeft: 4 }} />
+                            </ShimmerBox>
                         </View>
 
                         <View style={styles.controlButtonMedium}>
-                            <RotateCw size={28} color={colors.border} />
+                            <RotateCw size={28} color="rgba(0,0,0,0.05)" />
                         </View>
 
                         <View style={styles.controlButtonSmall}>
-                            <Info size={20} color={colors.border} />
+                            <View style={{ width: 20 }} />
                         </View>
                     </View>
-                </Animated.View>
-            </SafeAreaView>
+                </View>
+            </View>
         </View>
     );
 };
@@ -94,103 +141,134 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
+    backgroundBlurContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: screenHeight * 0.5,
+        overflow: 'hidden',
+    },
+    blurredBackground: {
+        width: '100%',
+        height: '100%',
+        opacity: 0.3,
+    },
+    topGradient: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+    },
     content: {
         flex: 1,
-        justifyContent: 'space-between',
-        paddingHorizontal: spacing.xl,
-        paddingBottom: spacing.xxl,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: Platform.OS === 'android' ? 40 : 0,
-        marginBottom: 20,
-        paddingHorizontal: 8,
-        paddingVertical: 8,
-        borderRadius: 30,
-        overflow: 'hidden',
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        paddingHorizontal: spacing.lg,
+        paddingTop: Platform.OS === 'android' ? spacing.md : 0,
     },
-    headerTitleShimmer: {
-        width: 120,
-        height: 18,
-        backgroundColor: colors.borderLight,
-        borderRadius: borderRadius.md,
+    headerIconButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.03)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    iconButton: {
-        padding: 8,
+    headerVisualizer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+        height: 30,
     },
-    coverContainer: {
-        width: width - 48,
-        height: width - 48,
-        alignSelf: 'center',
-        borderRadius: 20,
-        overflow: 'hidden',
-        marginBottom: 30,
+    headerBar: {
+        width: 3,
+        backgroundColor: '#000',
+        borderRadius: 1.5,
     },
-    coverImageShimmer: {
-        width: '100%',
-        height: '100%',
-        backgroundColor: colors.borderLight,
+    coverCardContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: spacing.xl,
+    },
+    coverCard: {
+        width: width * 0.75,
+        height: width * 0.75,
+        borderRadius: 24,
+    },
+    cardIcon: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    controlsSection: {
+        paddingTop: spacing.xxl,
+        paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
     },
     trackInfo: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
+        alignItems: 'flex-end',
+        marginBottom: spacing.xl,
+        paddingHorizontal: spacing.lg,
     },
     titleShimmer: {
-        width: 180,
-        height: 28,
-        backgroundColor: colors.borderLight,
+        width: width * 0.7,
+        height: 52, // 2 lines
         borderRadius: borderRadius.md,
         marginBottom: 8,
     },
     artistShimmer: {
-        width: 120,
-        height: 16,
-        backgroundColor: colors.borderLight,
+        width: width * 0.35,
+        height: 18,
         borderRadius: borderRadius.md,
     },
     progressContainer: {
-        marginBottom: 30,
+        marginBottom: spacing.lg,
     },
     sliderShimmer: {
-        width: '100%',
-        height: 4,
-        backgroundColor: colors.borderLight,
-        borderRadius: 2,
-        marginBottom: 8,
-        marginTop: 18, // To match slider height visually
+        width: '90%',
+        height: 6,
+        borderRadius: 3,
+        alignSelf: 'center',
+        marginBottom: 12,
+        marginTop: 18,
     },
     timeRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        paddingHorizontal: spacing.lg,
     },
     timeTextShimmer: {
-        width: 30,
+        width: 40,
         height: 12,
-        backgroundColor: colors.borderLight,
         borderRadius: 2,
     },
     controls: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        paddingHorizontal: spacing.lg,
     },
     controlButtonSmall: {
-        padding: 10,
+        padding: 8,
     },
     controlButtonMedium: {
-        padding: 10,
+        padding: 8,
+    },
+    playPauseWrapper: {
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     playPauseButtonShimmer: {
-        width: 70,
-        height: 70,
-        borderRadius: 35,
-        backgroundColor: colors.borderLight,
+        width: 72,
+        height: 72,
+        borderRadius: 36,
         justifyContent: 'center',
         alignItems: 'center',
     },

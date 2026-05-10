@@ -43,7 +43,7 @@ export const PostCard = React.memo(({ post, onPress, onLike, onComment, onShare,
                 <View style={styles.header}>
                     <View style={styles.userInfo}>
                         <Image
-                            source={{ uri: getImageUrl(post.user?.avatar_url) }}
+                            source={{ uri: getImageUrl(post.user?.avatar_url, { width: 80, height: 80, quality: 80 }) }}
                             style={styles.avatar}
                         />
                         <View>
@@ -89,27 +89,30 @@ export const PostCard = React.memo(({ post, onPress, onLike, onComment, onShare,
                 </View>
 
                 {/* Media */}
-                {(post.images && post.images.length > 0) || (post.is_uploading && post.local_image_urls && post.local_image_urls.length > 0) ? (
-                    <View style={styles.mediaWrapper}>
-                        <FlexibleCustomImage
-                            source={{ uri: getImageUrl(post.images?.[0]?.image_url || post.local_image_urls?.[0]) }}
-                            style={styles.postImage}
-                            resizeMode="cover"
-                        />
-                        {/* {post.is_uploading && (
-                            <View style={styles.imageOverlay}>
-                                <ActivityIndicator color="#FFF" size="small" />
-                            </View>
-                        )} */}
-                        {((post.images?.length || 0) > 1 || (post.local_image_urls?.length || 0) > 1) && (
-                            <View style={styles.imageCountBadge}>
-                                <Text style={styles.imageCountText}>
-                                    +{(post.images?.length || post.local_image_urls?.length || 1) - 1}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                ) : null}
+                {(() => {
+                    const imageUri = post.images?.[0]?.image_url || post.local_image_urls?.[0];
+                    if (!imageUri && !post.is_uploading) return null;
+                    
+                    const fullUri = getImageUrl(imageUri);
+                    
+                    return (
+                        <View style={styles.mediaWrapper}>
+                            <FlexibleCustomImage
+                                source={{ uri: imageUri }}
+                                style={styles.postImage}
+                                transformationOptions={{ width: 600, quality: 85 }}
+                                resizeMode="cover"
+                            />
+                            {((post.images?.length || 0) > 1 || (post.local_image_urls?.length || 0) > 1) && (
+                                <View style={styles.imageCountBadge}>
+                                    <Text style={styles.imageCountText}>
+                                        +{(post.images?.length || post.local_image_urls?.length || 1) - 1}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    );
+                })()}
 
                 {/* Actions */}
                 <View style={styles.actionsContainer}>
@@ -119,8 +122,8 @@ export const PostCard = React.memo(({ post, onPress, onLike, onComment, onShare,
                     >
                         <Heart
                             size={20}
-                            color={post.user_has_liked ? colors.error : colors.textMuted}
-                            fill={post.user_has_liked ? colors.error : 'transparent'}
+                            color={post.user_has_liked ? colors.primary : colors.textMuted}
+                            fill={post.user_has_liked ? colors.primary : 'transparent'}
                         />
                         <Text style={[styles.actionText, post.user_has_liked && styles.likedText]}>
                             {post.likes_count > 0 ? formatNumber(post.likes_count) : 'Like'}
@@ -258,7 +261,7 @@ const styles = StyleSheet.create({
         color: colors.textMuted,
     },
     likedText: {
-        color: colors.error,
+        color: colors.primary,
     },
     uploadBadge: {
         flexDirection: 'row',

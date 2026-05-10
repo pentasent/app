@@ -16,6 +16,7 @@ import {
     TextInput,
     Pressable,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -89,6 +90,7 @@ export default function ArticleDetailScreen() {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [commentToDeleteId, setCommentToDeleteId] = useState<string | null>(null);
     const [optionsTarget, setOptionsTarget] = useState<ArticleComment | null>(null);
+    const dataLoadedRef = useRef(false);
     const [toastMsg, setToastMsg] = useState<string | null>(null);
     const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('info');
     
@@ -124,9 +126,9 @@ export default function ArticleDetailScreen() {
     // Header Animation
     const scrollY = useRef(new Animated.Value(0)).current;
 
-    const fetchArticle = useCallback(async () => {
+    const fetchArticle = useCallback(async (silent: boolean = false) => {
         if (!slug) return;
-        setLoading(true);
+        if (!silent) setLoading(true);
         try {
             const { data: art, error: artErr } = await supabase
                 .from('articles')
@@ -201,6 +203,18 @@ export default function ArticleDetailScreen() {
             } as ArticleFull;
 
             setArticle(formattedArticle);
+            
+            // Cache article data
+            const cacheKey = `article_detail_${slug}`;
+            const existingCache = await AsyncStorage.getItem(cacheKey);
+            const cacheData = existingCache ? JSON.parse(existingCache) : {};
+            
+            await AsyncStorage.setItem(cacheKey, JSON.stringify({
+                ...cacheData,
+                article: formattedArticle,
+                timestamp: Date.now()
+            }));
+            dataLoadedRef.current = true;
         } catch (error:any) {
             crashlytics().recordError(error);
             console.log('[ERROR]:', 'Error fetching article:', error);
@@ -209,8 +223,8 @@ export default function ArticleDetailScreen() {
         }
     }, [slug, user]);
 
-    const fetchComments = async (articleId: string) => {
-        setCommentsLoading(true);
+    const fetchComments = async (articleId: string, silent: boolean = false) => {
+        if (!silent) setCommentsLoading(true);
         try {
             // Fetch ALL comments for this article to build tree locally
             const { data: allComments, error: commentsError } = await supabase
@@ -251,6 +265,22 @@ export default function ArticleDetailScreen() {
             } else {
                 setComments([]);
             }
+
+            // Cache comments data
+            const cacheKey = `article_detail_${slug}`;
+            const existingCache = await AsyncStorage.getItem(cacheKey);
+            const cacheData = existingCache ? JSON.parse(existingCache) : {};
+            
+            await AsyncStorage.setItem(cacheKey, JSON.stringify({
+                ...cacheData,
+                comments: allComments && allComments.length > 0 ? buildCommentTree(allComments.map(c => ({
+                    ...c,
+                    user: null, // Don't cache full profiles to keep cache small, or do?
+                    user_has_liked: false
+                }))) : [], // Note: Simplified cache for comments
+                timestamp: Date.now()
+            }));
+
         } catch (err:any) {
             crashlytics().recordError(err);
             console.log('[ERROR]:', 'Error fetching comments:', err);
@@ -260,14 +290,40 @@ export default function ArticleDetailScreen() {
     };
 
     useEffect(() => {
-        fetchArticle();
-    }, [fetchArticle]);
+        const loadCache = async () => {
+            if (!slug) return;
+            try {
+                const cached = await AsyncStorage.getItem(`article_detail_${slug}`);
+                if (cached) {
+                    const { article: cachedArt, comments: cachedComments } = JSON.parse(cached);
+                    if (cachedArt) {
+                        setArticle(cachedArt);
+                        dataLoadedRef.current = true;
+                        setLoading(false);
+                    }
+                    if (cachedComments) {
+                        setComments(cachedComments);
+                        setCommentsLoading(false);
+                    }
+                    fetchArticle(true); // Silent refresh
+                } else {
+                    fetchArticle(false); // Initial load
+                }
+            } catch (e) {
+                console.log('[ERROR]:', 'Error loading article detail cache:', e);
+                fetchArticle(false);
+            }
+        };
+        loadCache();
+    }, [slug]); // Simplified dependency to only slug to avoid repeated cache loads on user change if not needed
 
     useEffect(() => {
         if (article?.id) {
-            fetchComments(article.id);
+            // Fetch comments silently if we have cache, otherwise normal load
+            const isSilent = comments.length > 0;
+            fetchComments(article.id, isSilent);
         }
-    }, [article?.id, user]); // Added user to dependency array to refetch comments if user changes (e.g., logs in/out)
+    }, [article?.id, user]); // Refetch comments if user changes (e.g. to see likes)
 
     const handleCommentOptions = (comment: ArticleComment) => {
         if (!user || user.id !== comment.user_id) return;

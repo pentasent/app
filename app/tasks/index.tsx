@@ -1,11 +1,12 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, SafeAreaView, DeviceEventEmitter, TextInput, ScrollView, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, DeviceEventEmitter, TextInput, ScrollView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import crashlytics from '@/lib/crashlytics';
 import { useRouter } from 'expo-router'; // Correct import
 import { supabase } from '../../contexts/AuthContext';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
-import { Plus, CheckSquare, Calendar, ChevronRight, LayoutGrid, Circle, CheckCircle2, Search, Filter, ArrowUpDown, X } from 'lucide-react-native';
+import { Plus, CheckSquare, LayoutGrid, Circle, CheckCircle2, Search, Filter, X } from 'lucide-react-native';
 import { UserTask } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, isToday, parseISO, startOfDay, endOfDay } from 'date-fns';
@@ -13,6 +14,8 @@ import { TaskCardShimmer } from '@/components/shimmers/TaskCardShimmer';
 import { StatusBar } from 'expo-status-bar';
 import { useApp } from '@/contexts/AppContext';
 import KeyboardShiftView from '@/components/KeyboardShiftView';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { Sparkles, AlertCircle } from 'lucide-react-native';
 
 type SortOption = 'latest' | 'oldest' | 'priority';
 type FilterPriority = 'all' | 'high' | 'medium' | 'low';
@@ -23,6 +26,8 @@ export default function TasksScreen() {
   const { addNotification, showToast } = useApp();
   const [tasks, setTasks] = useState<UserTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const { subscription, isExpired, plan, limits } = useSubscription();
+  const [todayCount, setTodayCount] = useState(0);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -83,10 +88,29 @@ export default function TasksScreen() {
     }
   }, [user, searchQuery, sortBy, filterPriority, showToast]);
 
+  const fetchTodayCount = useCallback(async () => {
+    if (!user) return;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { count, error } = await supabase
+      .from('user_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .is('parent_task_id', null)
+      .gte('created_at', todayStart.toISOString());
+
+    if (!error) {
+      setTodayCount(count || 0);
+    }
+  }, [user]);
+
   // Debounce Search
   useEffect(() => {
     const timeout = setTimeout(() => {
       fetchTasks();
+      fetchTodayCount();
     }, 500); // 500ms delay
     return () => clearTimeout(timeout);
   }, [searchQuery, filterPriority, sortBy]);
@@ -97,13 +121,15 @@ export default function TasksScreen() {
       if (updatedTask && updatedTask.id) {
         // Optimistically update the single modified task without triggering a full page reload/fetch
         setTasks(current => current.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t));
+        fetchTodayCount();
       } else {
         // Fallback to full fetch (mostly for creations or deletions)
         fetchTasks();
+        fetchTodayCount();
       }
     });
     return () => subscription.remove();
-  }, [fetchTasks]);
+  }, [fetchTasks, fetchTodayCount]);
 
   const toggleTaskCompletion = async (task: UserTask) => {
     // Read-Only check for Completed tasks
@@ -174,6 +200,17 @@ export default function TasksScreen() {
     }
   };
 
+  const isNavigating = useRef(false);
+  const safePush = (route: string) => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
+    // @ts-ignore
+    router.push(route);
+    setTimeout(() => {
+      isNavigating.current = false;
+    }, 500);
+  };
+
   const clearFilters = () => {
     setSearchQuery('');
     setSortBy('latest');
@@ -188,7 +225,7 @@ export default function TasksScreen() {
     return (
       <TouchableOpacity
         style={[styles.card, isCompleted && styles.cardCompleted]}
-        onPress={() => router.push(`/tasks/${item.id}`)}
+        onPress={() => safePush(`/tasks/${item.id}`)}
         activeOpacity={0.7}
       >
         <TouchableOpacity
@@ -234,9 +271,12 @@ export default function TasksScreen() {
     );
   };
 
+  const isLimitReached = limits ? todayCount >= limits.tasks.tasks_per_day && limits.tasks.tasks_per_day !== -1 : false;
+  const canCreate = !isExpired && !!subscription && !isLimitReached;
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="dark" backgroundColor={colors.background} />
+      <StatusBar style="dark" />
 
       {/* Header */}
       <View style={styles.header}>
@@ -249,11 +289,50 @@ export default function TasksScreen() {
           </View>
           <TouchableOpacity
             style={styles.homeButton}
-            onPress={() => router.push('/(tabs)/explore')}
+            onPress={() => safePush('/(tabs)/explore')}
           >
             <LayoutGrid size={24} color={colors.primary} />
           </TouchableOpacity>
         </View>
+
+        {/* Subscription Expired Card */}
+        {(isExpired || !subscription) && (
+          <TouchableOpacity 
+              style={styles.expiredCard}
+              onPress={() => safePush('/subscription/upgrade')}
+              activeOpacity={0.9}
+          >
+              <View style={styles.expiredIconContainer}>
+                  <AlertCircle size={20} color={colors.error} />
+              </View>
+              <View style={{ flex: 1 }}>
+                  <Text style={styles.expiredTitle}>Subscription Expired</Text>
+                  <Text style={styles.expiredSubtitle}>Please renew your plan to continue managing unlimited tasks.</Text>
+              </View>
+              <View style={styles.renewBadge}>
+                  <Text style={styles.renewText}>RENEW</Text>
+              </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Daily Limit Reached Card */}
+        {!isExpired && subscription && isLimitReached && (
+          <View style={styles.limitCard}>
+              <View style={styles.limitIconContainer}>
+                  <Sparkles size={20} color="#F59E0B" />
+              </View>
+              <View style={{ flex: 1 }}>
+                  <Text style={styles.limitTitle}>Daily Limit Reached</Text>
+                  <Text style={styles.limitSubtitle}>You've hit your daily task creation limit. Upgrade for more!</Text>
+              </View>
+              <TouchableOpacity 
+                  style={styles.upgradeBtn}
+                  onPress={() => safePush('/subscription/upgrade')}
+              >
+                  <Text style={styles.upgradeBtnText}>UPGRADE</Text>
+              </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <View style={{ flex: 1 }}>
@@ -283,11 +362,15 @@ export default function TasksScreen() {
                 <TouchableOpacity
                   style={styles.emptyButton}
                   onPress={() => {
-                    clearFilters();
-                    router.push('/tasks/create');
+                    if (canCreate) {
+                      clearFilters();
+                      safePush('/tasks/create');
+                    } else {
+                      safePush('/subscription/upgrade');
+                    }
                   }}
                 >
-                  <Text style={styles.emptyButtonText}>Add New Task</Text>
+                  <Text style={styles.emptyButtonText}>{canCreate ? 'Add New Task' : 'Manage Subscription'}</Text>
                 </TouchableOpacity>
               </View>
             }
@@ -295,15 +378,17 @@ export default function TasksScreen() {
         )}
 
         {/* FAB */}
-        <View style={styles.fabWrapper} pointerEvents="box-none">
-          <TouchableOpacity
-            style={styles.fab}
-            activeOpacity={0.8}
-            onPress={() => router.push('/tasks/create')}
-          >
-            <Plus size={24} color="#FFF" strokeWidth={2.5} />
-          </TouchableOpacity>
-        </View>
+        {canCreate && (
+          <View style={styles.fabWrapper} pointerEvents="box-none">
+            <TouchableOpacity
+              style={styles.fab}
+              activeOpacity={0.8}
+              onPress={() => safePush('/tasks/create')}
+            >
+              <Plus size={24} color="#FFF" strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Bottom Section */}
         <KeyboardShiftView style={styles.bottomContainer}>
@@ -384,7 +469,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xxl,
+    paddingTop: spacing.md - 3.5,
     paddingBottom: spacing.md,
     backgroundColor: colors.background,
   },
@@ -401,6 +486,88 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 14,
     color: colors.textLight,
+  },
+  expiredCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.error + '10',
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.error + '20',
+    marginTop: spacing.sm,
+  },
+  expiredIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.error + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  expiredTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.error,
+  },
+  expiredSubtitle: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 2,
+  },
+  renewBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.error,
+    borderRadius: 20,
+    marginLeft: spacing.sm,
+  },
+  renewText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FFF',
+  },
+  limitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F59E0B' + '10',
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: '#F59E0B' + '20',
+    marginTop: spacing.sm,
+  },
+  limitIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F59E0B' + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  limitTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#F59E0B',
+  },
+  limitSubtitle: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 2,
+  },
+  upgradeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#F59E0B',
+    borderRadius: 20,
+    marginLeft: spacing.sm,
+  },
+  upgradeBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FFF',
   },
   homeButton: {
     padding: 8,

@@ -8,12 +8,13 @@ import {
     SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, ShoppingBag, Calendar, UserCheck, Heart, MessageCircle, MessageSquare, Users, Bell, AlertTriangle, CheckCircle, Info } from 'lucide-react-native';
+import { ArrowLeft, ShoppingBag, Calendar, UserCheck, Heart, MessageCircle, MessageSquare, Users, Bell, AlertTriangle, CheckCircle, Info, Circle, Zap } from 'lucide-react-native';
 import { useApp } from '../../contexts/AppContext';
-import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
+import { colors, spacing, borderRadius, typography } from '../../constants/theme';
 import { Notification } from '../../types';
 import { Toast } from '../../components/Toast';
 import crashlytics from '@/lib/crashlytics';
+import { formatDateWithTime } from '@/utils/format';
 
 export default function NotificationsScreen() {
     const router = useRouter();
@@ -30,13 +31,15 @@ export default function NotificationsScreen() {
             case 'comment_reply':
                 return <MessageCircle size={24} color={colors.primary} />;
             case 'chat_message':
-                return <MessageSquare size={24} color={colors.secondary} />;
+                return <MessageSquare size={24} color={colors.secondaryDark} />;
             case 'community_follow':
                 return <Users size={24} color={colors.primary} />;
             case 'account_warning':
                 return <AlertTriangle size={24} color={colors.warning} />;
             case 'system_announcement':
-                return <Bell size={24} color={colors.accent} />;
+                return <Bell size={24} color={colors.primary} />;
+            case 'subscription_alert':
+                return <Zap size={24} color={colors.primary} />;
             default:
                 // Fallback to category based icons
                 switch (category) {
@@ -46,21 +49,6 @@ export default function NotificationsScreen() {
                     default: return <Info size={24} color={colors.primary} />;
                 }
         }
-    };
-
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-
-        if (diffMins < 1) return 'Just now';
-        if (diffMins < 60) return `${diffMins}m ago`;
-        if (diffHours < 24) return `${diffHours}h ago`;
-        if (diffDays < 7) return `${diffDays}d ago`;
-        return date.toLocaleDateString();
     };
 
     const handleNotificationPress = async (notification: Notification) => {
@@ -139,7 +127,7 @@ export default function NotificationsScreen() {
                                         {!notification.is_seen && <View style={styles.unreadDot} />}
                                     </View>
                                     <Text style={styles.notificationMessage}>{notification.message}</Text>
-                                    <Text style={styles.notificationDate}>{formatDate(notification.created_at)}</Text>
+                                    <Text style={styles.notificationDate}>{formatDateWithTime(notification.created_at)}</Text>
                                 </View>
                             </TouchableOpacity>
                         )
@@ -215,7 +203,7 @@ const styles = StyleSheet.create({
         borderBottomColor: colors.border,
     },
     unreadCard: {
-        backgroundColor: colors.primaryLight + "30", // Ensure this color exists or use a hardcoded one if needed. 
+        backgroundColor: colors.primaryLight, // Ensure this color exists or use a hardcoded one if needed. 
         // Assuming primaryLight is defined in theme, otherwise fallback to standard light color
         // borderBottomColor: colors.primary,
         // borderBottomWidth: 0,

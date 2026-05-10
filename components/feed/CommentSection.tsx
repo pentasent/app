@@ -16,21 +16,32 @@ interface CommentSectionProps {
     onLikeComment: (commentId: string) => void;
     onReply: (comment: Comment) => void;
     currentUserId?: string;
+    isAdmin?: boolean;
     onOptions?: (comment: Comment) => void;
 }
 
 
 
-export const CommentSection = ({ comments, isLoading, commentCount, onLikeComment, onReply, currentUserId, onOptions }: CommentSectionProps) => {
-    const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
-    const [expandedText, setExpandedText] = useState<Record<string, boolean>>({});
+export const CommentSection = ({ comments, isLoading, commentCount, onLikeComment, onReply, currentUserId, isAdmin, onOptions }: CommentSectionProps) => {
+    // Flatten the comments tree into a single array for virtualization
+    const flattenedComments = React.useMemo(() => {
+        const result: (Comment & { depth: number; isReply?: boolean })[] = [];
+        
+        const flatten = (items: Comment[], depth = 0) => {
+            items.forEach(item => {
+                if (!item) return;
+                result.push({ ...item, depth, isReply: depth > 0 });
+                if (Array.isArray(item.replies) && item.replies.length > 0) {
+                    flatten(item.replies as Comment[], depth + 1);
+                }
+            });
+        };
+        
+        flatten(comments);
+        return result;
+    }, [comments]);
 
-    const toggleExpand = (commentId: string) => {
-        setExpandedComments(prev => ({
-            ...prev,
-            [commentId]: !prev[commentId]
-        }));
-    };
+    const [expandedText, setExpandedText] = useState<Record<string, boolean>>({});
 
     const toggleTextExpand = (commentId: string) => {
         setExpandedText(prev => ({
@@ -62,17 +73,20 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
         );
     };
 
-    const renderComment = ({ item }: { item: Comment }) => (
-        <View style={styles.commentContainer}>
+    const renderComment = ({ item }: { item: Comment & { depth: number; isReply?: boolean } }) => (
+        <View style={[
+            styles.commentContainer, 
+            item.depth > 0 && { marginLeft: Math.min(item.depth * 20, 60), marginBottom: 12 }
+        ]}>
             <Image
                 source={{ uri: getImageUrl(item.user?.avatar_url) }}
-                style={styles.avatar}
+                style={item.depth > 0 ? styles.replyAvatar : styles.avatar}
             />
             <View style={styles.commentContent}>
                 <View style={styles.commentHeader}>
                     <Text style={styles.username}>{item.user?.name || 'User'}</Text>
                     <Text style={styles.time}>{formatDate(item.created_at)}</Text>
-                    {currentUserId === item.user_id && onOptions && (
+                    {(currentUserId === item.user_id || isAdmin) && onOptions && (
                         <TouchableOpacity onPress={() => onOptions(item)} style={{ marginLeft: 'auto', padding: 4 }}>
                             <MoreHorizontal size={16} color={colors.textMuted} />
                         </TouchableOpacity>
@@ -88,8 +102,8 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
                     >
                         <Heart
                             size={14}
-                            color={item.user_has_liked ? colors.error : colors.textMuted}
-                            fill={item.user_has_liked ? colors.error : 'transparent'}
+                            color={item.user_has_liked ? colors.primary : colors.textMuted}
+                            fill={item.user_has_liked ? colors.primary : 'transparent'}
                         />
                         <Text style={[styles.actionText, item.user_has_liked && styles.likedText]}>
                             {item.likes_count > 0 ? item.likes_count : 'Like'}
@@ -103,76 +117,6 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
                         <Text style={styles.actionText}>Reply</Text>
                     </TouchableOpacity>
                 </View>
-
-                {/* Nested Replies */}
-                {Array.isArray(item.replies) && item.replies.filter(Boolean).length > 0 && (
-                    <View style={styles.repliesContainer}>
-                        {(() => {
-                            const allReplies = item.replies.filter(Boolean);
-                            const isExpandedRepies = expandedComments[item.id];
-                            const visibleReplies = isExpandedRepies ? allReplies : allReplies.slice(0, 2);
-                            const hiddenCount = allReplies.length - visibleReplies.length;
-
-                            return (
-                                <>
-                                    {visibleReplies.map((reply, index, array) => {
-                                        const isLast = index === array.length - 1;
-                                        return (
-                                            <View key={reply.id} style={styles.replyItemWrapper}>
-                                                {!isLast && <View style={styles.threadLine} />}
-                                                <View style={styles.curvedLine} />
-
-                                                <View style={styles.replyItem}>
-                                                    <Image
-                                                        source={{ uri: getImageUrl(reply.user?.avatar_url) }}
-                                                        style={styles.replyAvatar}
-                                                    />
-                                                    <View style={{ flex: 1 }}>
-                                                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-                                                                <Text
-                                                                    style={[styles.username, { flexShrink: 1 }]}
-                                                                    numberOfLines={1}
-                                                                    ellipsizeMode="tail"
-                                                                >
-                                                                    {reply.user?.name}
-                                                                </Text>
-                                                                <Text style={styles.time}>
-                                                                    {formatDate(reply.created_at)}
-                                                                </Text>
-                                                            </View>
-                                                            {currentUserId === reply.user_id && onOptions && (
-                                                                <TouchableOpacity onPress={() => onOptions(reply)} style={{ padding: 4 }}>
-                                                                    <MoreHorizontal size={14} color={colors.textMuted} />
-                                                                </TouchableOpacity>
-                                                            )}
-                                                        </View>
-                                                        {renderCommentText(reply.content, reply.id)}
-                                                    </View>
-                                                </View>
-                                            </View>
-                                        );
-                                    })}
-
-                                    {!isExpandedRepies && hiddenCount > 0 && (
-                                        <View style={styles.loadMoreWrapper}>
-                                            <TouchableOpacity onPress={() => toggleExpand(item.id)} style={styles.actionButton}>
-                                                <Text style={styles.loadMoreText}>Load more +{hiddenCount}</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    )}
-                                    {isExpandedRepies && allReplies.length > 2 && (
-                                        <View style={styles.loadMoreWrapper}>
-                                            <TouchableOpacity onPress={() => toggleExpand(item.id)} style={styles.actionButton}>
-                                                <Text style={styles.loadMoreText}>See less</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    )}
-                                </>
-                            );
-                        })()}
-                    </View>
-                )}
             </View>
         </View>
     );
@@ -191,11 +135,14 @@ export const CommentSection = ({ comments, isLoading, commentCount, onLikeCommen
                 </>
             ) : (
                 <FlatList
-                    data={comments}
+                    data={flattenedComments}
                     renderItem={renderComment}
                     keyExtractor={item => item.id}
                     scrollEnabled={false}
                     contentContainerStyle={styles.listContent}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={5}
+                    windowSize={5}
                 />
             )}
         </View>
@@ -267,7 +214,7 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     likedText: {
-        color: colors.error,
+        color: colors.primary,
     },
     repliesContainer: {
         marginTop: 12,

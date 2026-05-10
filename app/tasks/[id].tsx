@@ -14,7 +14,10 @@ import { TaskDetailShimmer } from '@/components/shimmers/TaskDetailShimmer';
 import { Toast } from '@/components/Toast';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { useApp } from '@/contexts/AppContext';
+import { trackEvent } from '@/lib/analytics/track';
+import { MayaService } from '@/lib/maya/service';
 import { CustomTimePicker } from '@/components/CustomTimePicker';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 
 const MAX_TITLE_LENGTH = 50;
 const AVAILABLE_TAGS = ['Work', 'Personal', 'Health', 'Diet', 'Learning', 'Shopping', 'Home', 'Finance'];
@@ -24,6 +27,8 @@ export default function TaskDetailScreen() {
     const router = useRouter();
     const { user } = useAuth();
     const { addNotification } = useApp();
+    const { subscription, isExpired, limits } = useSubscription();
+    const [todayCount, setTodayCount] = useState(0);
 
     const [task, setTask] = useState<UserTask | null>(null);
     const [loading, setLoading] = useState(true);
@@ -57,8 +62,27 @@ export default function TaskDetailScreen() {
         if (id) {
             fetchTaskDetails();
             fetchSubtasks();
+            fetchTodayCount();
         }
     }, [id]);
+
+    const fetchTodayCount = async () => {
+        if (!user) return;
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const { count, error } = await supabase
+            .from('user_tasks')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .is('parent_task_id', null)
+            .gte('created_at', todayStart.toISOString());
+
+        if (!error) {
+            setTodayCount(count || 0);
+        }
+    };
 
     const fetchTaskDetails = async () => {
         try {
@@ -301,6 +325,14 @@ export default function TaskDetailScreen() {
         if (!task || !user || isRepeating) return;
         
         try {
+            // Quota Check
+            const { allowed } = await MayaService.checkTasksQuota(user.id);
+            if (!allowed) {
+                setShowRepeatModal(false);
+                router.push('/subscription/upgrade');
+                return;
+            }
+
             setIsRepeating(true);
             
             // 1. Create a fresh main task based on current state
@@ -513,13 +545,15 @@ export default function TaskDetailScreen() {
                                         <Circle size={24} color={colors.primary} />
                                     )}
                                 </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[styles.iconButton, { marginLeft: 8 }]}
-                                    onPress={() => setShowRepeatModal(true)}
-                                >
-                                    <RotateCcw size={22} color={colors.text} />
-                                </TouchableOpacity>
+                                
+                                {subscription && !isExpired && (limits ? (todayCount < limits.tasks.tasks_per_day || limits.tasks.tasks_per_day === -1) : true) && (
+                                    <TouchableOpacity
+                                        style={[styles.iconButton, { marginLeft: 8 }]}
+                                        onPress={() => setShowRepeatModal(true)}
+                                    >
+                                        <RotateCcw size={22} color={colors.text} />
+                                    </TouchableOpacity>
+                                )}
                             </>
                         )}
                     </View>
@@ -789,7 +823,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: spacing.md,
-        paddingTop: spacing.md,
+        paddingTop: spacing.sm,
         paddingBottom: spacing.sm,
         borderBottomWidth: 1,
         borderBottomColor: colors.borderLight,
@@ -815,6 +849,7 @@ const styles = StyleSheet.create({
     },
     content: {
         padding: spacing.lg,
+        paddingTop: spacing.md,
         paddingBottom: 40,
     },
     // statusRow: {

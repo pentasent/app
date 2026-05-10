@@ -134,18 +134,6 @@ export default function SetupProfileScreen() {
             // Update local context
             await refreshUser();
 
-            // Explicitly route instead of relying on layout race conditions
-            const { data: comms } = await supabase
-                .from('community_followers')
-                .select('community_id')
-                .eq('user_id', user.id);
-
-            if (!comms || comms.length === 0) {
-                router.replace('/onboarding-communities');
-            } else {
-                router.replace('/(tabs)');
-            }
-
         } catch (error: any) {
             crashlytics().recordError(error);
             setErrorMsg(error.message || 'Failed to finish setting up your profile.');
@@ -157,7 +145,7 @@ export default function SetupProfileScreen() {
     return (
         <>
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" backgroundColor={colors.background} />
+                <StatusBar style="dark" />
                 <Toast message={errorMsg} onHide={() => setErrorMsg(null)} />
                 <KeyboardShiftView style={styles.keyboardContainer}>
                     <ScrollView
@@ -243,7 +231,7 @@ export default function SetupProfileScreen() {
                                 title="Complete Setup"
                                 onPress={handleSubmit}
                                 loading={loading}
-                                disabled={!isFormValid || loading}
+                                disabled={!isFormValid}
                                 style={styles.submitButton}
                             />
                         </View>

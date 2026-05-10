@@ -1,6 +1,6 @@
 import { CustomImage as Image } from '@/components/CustomImage';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Beat } from '@/types';
 import { colors, spacing, borderRadius } from '@/constants/theme';
 import { Play, BarChart2 } from 'lucide-react-native';
@@ -11,10 +11,32 @@ import { getImageUrl } from '@/utils/get-image-url';
 interface BeatCardProps {
     beat: Beat;
     onPlay: (beat: Beat) => void;
+    index?: number;
+    isLast?: boolean;
 }
 
-export const BeatCard: React.FC<BeatCardProps> = ({ beat, onPlay }) => {
+export const BeatCard: React.FC<BeatCardProps> = ({ beat, onPlay, index = 0, isLast = false }) => {
     const [imageLoaded, setImageLoaded] = useState(false);
+    const fadeAnim = React.useRef(new Animated.Value(0)).current;
+    const translateY = React.useRef(new Animated.Value(15)).current;
+
+    React.useEffect(() => {
+        Animated.parallel([
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 400,
+                delay: Math.min(index * 60, 600),
+                useNativeDriver: true,
+            }),
+            Animated.spring(translateY, {
+                toValue: 0,
+                tension: 40,
+                friction: 8,
+                delay: Math.min(index * 60, 600),
+                useNativeDriver: true,
+            })
+        ]).start();
+    }, []);
 
     const formatDuration = (seconds?: number) => {
         if (!seconds) return '0:00';
@@ -24,59 +46,62 @@ export const BeatCard: React.FC<BeatCardProps> = ({ beat, onPlay }) => {
     };
 
     return (
-        <TouchableOpacity
-            style={styles.card}
-            onPress={() => {
-                trackEvent('beats_played', { beat_id: beat.id, title: beat.title });
-                onPlay(beat);
-            }}
-            activeOpacity={0.9}
-        >
-            <View style={styles.imageContainer}>
-                <Image
-                    source={{ uri: getImageUrl(beat.banner_url) }}
-                    style={styles.image}
-                    onLoad={() => setImageLoaded(true)}
-                />
-                {imageLoaded && (
-                    <>
-                        <View style={styles.playOverlay}>
-                            <View style={styles.playButton}>
-                                <Play size={18} color={colors.textMuted} fill={colors.background} style={{ marginLeft: 2 }} />
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY }] }}>
+            <TouchableOpacity
+                style={styles.card}
+                onPress={() => {
+                    trackEvent('beats_played', { beat_id: beat.id, title: beat.title });
+                    onPlay(beat);
+                }}
+                activeOpacity={0.9}
+            >
+                <View style={styles.imageContainer}>
+                    <Image
+                        source={{ uri: getImageUrl(beat.banner_url) }}
+                        style={styles.image}
+                        onLoad={() => setImageLoaded(true)}
+                    />
+                    {imageLoaded && (
+                        <>
+                            <View style={styles.playOverlay}>
+                                <View style={styles.playButton}>
+                                    <Play size={18} color={colors.textMuted} fill={colors.background} style={{ marginLeft: 2 }} />
+                                </View>
                             </View>
-                        </View>
-                        <View style={styles.durationBadge}>
-                            <Text style={styles.durationText}>{formatDuration(beat.duration_seconds)}</Text>
-                        </View>
-                    </>
-                )}
-            </View>
-
-            <View style={styles.content}>
-                <View style={styles.headerRow}>
-                    <Text style={styles.title} numberOfLines={1}>{beat.title}</Text>
+                            <View style={styles.durationBadge}>
+                                <Text style={styles.durationText}>{formatDuration(beat.duration_seconds)}</Text>
+                            </View>
+                        </>
+                    )}
                 </View>
 
-                {beat.short_description && (
-                    <Text style={styles.description} numberOfLines={1}>
-                        {beat.short_description}
-                    </Text>
-                )}
+                <View style={styles.content}>
+                    <View style={styles.headerRow}>
+                        <Text style={styles.title} numberOfLines={1}>{beat.title}</Text>
+                    </View>
 
-                <View style={styles.footer}>
-                    {beat.beat_tags?.name && (
-                        <View style={styles.tagChip}>
-                            <Text style={styles.tagText}>{beat.beat_tags.name}</Text>
-                        </View>
+                    {beat.short_description && (
+                        <Text style={styles.description} numberOfLines={1}>
+                            {beat.short_description}
+                        </Text>
                     )}
 
-                    <View style={styles.stats}>
-                        <BarChart2 size={12} color={colors.textLight} />
-                        <Text style={styles.statsText}>{beat.play_count ? formatNumber(beat.play_count) : 0} plays</Text>
+                    <View style={styles.footer}>
+                        {beat.beat_tags?.name && (
+                            <View style={styles.tagChip}>
+                                <Text style={styles.tagText}>{beat.beat_tags.name}</Text>
+                            </View>
+                        )}
+
+                        <View style={styles.stats}>
+                            <BarChart2 size={12} color={colors.textLight} />
+                            <Text style={styles.statsText}>{beat.play_count ? formatNumber(beat.play_count) : 0} plays</Text>
+                        </View>
                     </View>
                 </View>
-            </View>
-        </TouchableOpacity>
+            </TouchableOpacity>
+            {!isLast && <View style={{ height: 2, backgroundColor: colors.borderLight }} />}
+        </Animated.View>
     );
 };
 

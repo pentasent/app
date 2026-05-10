@@ -1,37 +1,43 @@
 export const colors = {
-  primary: '#E8B4B8',
-  primaryDark: '#D49499',
-  primaryLight: '#F5D5D8',
+  // Brand Palette (Dusty Rose & Sage)
+  primary: '#D49499',      // 100% Brand Main (Dusty Rose)
+  primaryDark: '#B8757A',  // 120% Darker (for pressed states)
+  primaryLight: '#F9F1F2', // 10% Tint (for badges/fills)
 
-  secondary: '#A8D5BA',
-  secondaryDark: '#8BC4A0',
-  secondaryLight: '#C8E6D3',
+  secondary: '#A8D5BA',     // 100% Brand Secondary
+  secondaryDark: '#8BB49B', // 120% Darker
+  secondaryLight: '#F0F7F3', // 10% Tint
 
-  accent: '#F9E5D8',
+  accent: '#F9E5D8',        // Warm Peach
   accentDark: '#F0D5C4',
 
-  background: '#FFFBF7',
-  surface: '#FFFFFF',
-  card: '#FFF8F3',
+  // Neutral Scale (Clean & Balanced)
+  background: '#F8F8F8',    // Clean Base Grey
+  surface: '#FFFFFF',       // Absolute White
+  card: '#FFFFFF',
 
-  text: '#3D3D3D',
-  textLight: '#7A7A7A',
-  textMuted: '#A8A8A8',
+  text: '#121212',         // 90% Contrast (Headings)
+  textLight: '#4B4B4B',    // 60% Contrast (Body/Subtext)
+  textMuted: '#949494',    // 40% Contrast (Captions/Placeholders)
 
-  success: '#A8D5BA',
-  warning: '#FFD4A3',
-  error: '#E8B4B8',
-  info: '#B8D4E8',
+  // System States
+  success: '#82C49A',
+  warning: '#FFB86C',
+  error: '#D32F2F',
+  info: '#4A90E2',
 
-  border: '#F0E8E4',
-  borderLight: '#F8F2EE',
+  // Borders & Dividers
+  border: '#E8E8E8',       // Standard contrast
+  borderLight: '#F2F2F2',  // Subtle contrast
 
-  disabled: '#E8E8E8',
-  disabledText: '#B8B8B8',
+  disabled: '#E0E0E0',
+  disabledText: '#A1A1A1',
 
-  shadow: 'rgba(232, 180, 184, 0.15)',
+  // Shadows & Effects
+  shadow: 'rgba(74, 44, 64, 0.08)', // Soft plum-tinted shadow
 
-  websiteSubtitle: '#6b4c5c'
+  websiteSubtitle: '#6B4C5C',
+  indigoLight: '#8B5CF6'
 };
 
 export const spacing = {

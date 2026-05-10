@@ -3,24 +3,22 @@ import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Pla
 import { useRouter } from 'expo-router';
 import { colors, spacing, borderRadius, typography } from '../../constants/theme';
 import {
-    ArrowLeft,
     Mail,
     Globe,
     Shield,
     FileText,
     Lock,
     Baby,
-    ChevronRight
+    ChevronRight,
+    Info,
+    Trash2
 } from 'lucide-react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../../contexts/AuthContext';
-import { getImageUrl } from '@/utils/get-image-url';
-import { CustomImage as Image } from '../../components/CustomImage';
 
 export default function ContactUsScreen() {
     const router = useRouter();
-    const { user } = useAuth();
 
     const handleEmail = () => {
         Linking.openURL('mailto:hello@pentasent.com');
@@ -39,7 +37,9 @@ export default function ContactUsScreen() {
             pinterest: 'https://www.pinterest.com/pentasent',
             privacy: "https://www.pentasent.com/privacy-policy",
             terms: "https://www.pentasent.com/terms-and-conditions",
-            childpolicy: "https://www.pentasent.com/children-policy"
+            childpolicy: "https://www.pentasent.com/children-policy",
+            aboutus: "https://www.pentasent.com/about",
+            deleteaccount: "https://www.pentasent.com/help/delete-account"
         };
         Linking.openURL(urls[platform] || 'https://www.pentasent.com');
     };
@@ -144,7 +144,7 @@ export default function ContactUsScreen() {
                         <ChevronRight size={16} color={colors.textLight} />
                     </TouchableOpacity>
 
-                    <View style={styles.rowDivider} />
+                    {/* <View style={styles.rowDivider} /> */}
 
                     {/* <TouchableOpacity style={styles.linkRow}>
                         <View style={styles.linkLeft}>
@@ -160,6 +160,26 @@ export default function ContactUsScreen() {
                         <View style={styles.linkLeft}>
                             <Baby size={18} color={colors.textMuted} />
                             <Text style={styles.linkText}>Child Policy</Text>
+                        </View>
+                        <ChevronRight size={16} color={colors.textLight} />
+                    </TouchableOpacity>
+
+                    <View style={styles.rowDivider} />
+
+                    <TouchableOpacity style={styles.linkRow} onPress={() => handleSocial('aboutus')}>
+                        <View style={styles.linkLeft}>
+                            <Info size={18} color={colors.textMuted} />
+                            <Text style={styles.linkText}>About Us</Text>
+                        </View>
+                        <ChevronRight size={16} color={colors.textLight} />
+                    </TouchableOpacity>
+
+                    <View style={styles.rowDivider} />
+
+                    <TouchableOpacity style={styles.linkRow} onPress={() => handleSocial('deleteaccount')}>
+                        <View style={styles.linkLeft}>
+                            <Trash2 size={18} color={colors.textMuted} />
+                            <Text style={styles.linkText}>Delete Account</Text>
                         </View>
                         <ChevronRight size={16} color={colors.textLight} />
                     </TouchableOpacity>

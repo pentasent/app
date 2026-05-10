@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, SafeAreaView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '../../constants/theme';
-import { supabase } from '../../contexts/AuthContext';
+import { supabase, useAuth } from '../../contexts/AuthContext';
 import { Beat, BeatTag } from '@/types';
 import { BeatTagList } from '../../components/beats/BeatTagList';
 // import { BeatFilter, SortOption } from '../../components/beats/BeatFilter';
@@ -16,6 +18,7 @@ type SortOption = 'views' | 'duration';
 
 export default function BeatsScreen() {
     const router = useRouter();
+    const { user } = useAuth();
     const { showToast } = useApp();
     const [tags, setTags] = useState<BeatTag[]>([]);
     const [beats, setBeats] = useState<Beat[]>([]);
@@ -25,6 +28,7 @@ export default function BeatsScreen() {
     // Filters
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<SortOption>('views');
+    const insets = useSafeAreaInsets();
 
     const fetchData = useCallback(async () => {
         try {
@@ -45,9 +49,32 @@ export default function BeatsScreen() {
                 .eq('is_active', true);
 
             if (beatsError) throw beatsError;
+            
             if (beatsData) {
                 setBeats(beatsData);
+                
+                // Calculate counts dynamically if tags are already fetched
+                if (tagsData) {
+                    const counts = beatsData.reduce((acc: any, beat: any) => {
+                        acc[beat.tag_id] = (acc[beat.tag_id] || 0) + 1;
+                        return acc;
+                    }, {});
+                    
+                    const tagsWithCounts = tagsData.map((t: any) => ({
+                        ...t,
+                        music_count: counts[t.id] || 0
+                    }));
+                    setTags(tagsWithCounts);
+                }
             }
+
+            // Cache the data
+            const cacheData = {
+                tags: tagsData || [],
+                beats: beatsData || [],
+                timestamp: Date.now()
+            };
+            await AsyncStorage.setItem('beats_cache', JSON.stringify(cacheData));
         } catch (error:any) {
             crashlytics().recordError(error);
             console.log('[ERROR]:', 'Error fetching beats data:', error);
@@ -59,6 +86,22 @@ export default function BeatsScreen() {
     }, [showToast]);
 
     useEffect(() => {
+        const loadCache = async () => {
+            try {
+                const cached = await AsyncStorage.getItem('beats_cache');
+                if (cached) {
+                    const { tags: cachedTags, beats: cachedBeats } = JSON.parse(cached);
+                    if (cachedTags?.length) setTags(cachedTags);
+                    if (cachedBeats?.length) {
+                        setBeats(cachedBeats);
+                        setLoading(false); // Hide initial loader if we have cache
+                    }
+                }
+            } catch (e) {
+                console.log('[ERROR]:', 'Error loading beats cache:', e);
+            }
+        };
+        loadCache();
         fetchData();
     }, [fetchData]);
 
@@ -107,16 +150,24 @@ export default function BeatsScreen() {
         }
     };
 
+    const isNavigating = React.useRef(false);
     const handlePlayBeat = (beat: Beat) => {
+        if (isNavigating.current) return;
+        isNavigating.current = true;
+
         const currentCount = beat.play_count || 0;
         incrementPlayCount(beat.id, currentCount);
 
         // @ts-ignore
         router.push(`/beats/${beat.id}`);
+
+        setTimeout(() => {
+            isNavigating.current = false;
+        }, 500);
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             <ParticleBackground />
 
             <View style={styles.header}>
@@ -133,36 +184,35 @@ export default function BeatsScreen() {
                 />
             </View>
 
-            {loading && !refreshing ? (
-                <FlatList
-                    data={[1, 2, 3, 4, 5, 6]}
-                    keyExtractor={(item) => item.toString()}
-                    renderItem={() => <BeatCardShimmer />}
-                    contentContainerStyle={{ paddingBottom: 100 }}
-                    showsVerticalScrollIndicator={false}
-                />
-            ) : (
-                <FlatList
-                    data={filteredBeats}
-                    keyExtractor={(item) => item.id}
-                    renderItem={({ item }) => (
-                        <BeatCard beat={item} onPlay={handlePlayBeat} />
-                    )}
-                    contentContainerStyle={styles.listContent}
-                    ItemSeparatorComponent={() => (
-                        <View style={{ height: 2, backgroundColor: colors.borderLight }} />
-                    )}
-                    refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                    }
-                    ListEmptyComponent={
+            <FlatList
+                data={(loading && !refreshing ? [1, 2, 3, 4, 5, 6] : filteredBeats) as any[]}
+                keyExtractor={(item) => (typeof item === 'number' ? `shimmer-${item}` : item.id)}
+                renderItem={({ item, index }) => (
+                    loading && !refreshing ? (
+                        <BeatCardShimmer />
+                    ) : (
+                        <BeatCard 
+                            beat={item as Beat} 
+                            onPlay={handlePlayBeat} 
+                            index={index}
+                            isLast={index === (filteredBeats.length - 1)}
+                        />
+                    )
+                )}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                ListEmptyComponent={
+                    !loading ? (
                         <View style={styles.emptyContainer}>
                             <Text style={styles.emptyText}>No beats found</Text>
                         </View>
-                    }
-                />
-            )}
-        </SafeAreaView>
+                    ) : null
+                }
+            />
+        </View>
     );
 }
 
@@ -179,7 +229,8 @@ const styles = StyleSheet.create({
     },
     header: {
         paddingHorizontal: spacing.lg,
-        paddingTop: spacing.xxl,
+        // paddingTop: spacing.xxl,
+        paddingTop: spacing.md - 3.5,
         paddingBottom: spacing.sm,
         zIndex: 1,
     },

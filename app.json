@@ -2,8 +2,8 @@
   "expo": {
     "name": "Pentasent",
     "slug": "pentasent",
-    "version": "1.0.1",
-    "orientation": "portrait",
+    "version": "1.0.2",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "pentasent",
     "splash": {
@@ -14,6 +14,13 @@
     "android": {
       "package": "com.pentasent.app",
       "googleServicesFile": "./google-services.json",
+      "statusBar": {
+        "translucent": true,
+        "backgroundColor": "#00000000"
+      },
+      "navigationBar": {
+        "backgroundColor": "#00000000"
+      },
       "permissions": [
         "INTERNET",
         "android.permission.RECORD_AUDIO",
@@ -31,12 +38,12 @@
             {
               "scheme": "https",
               "host": "pentasent.com",
-              "pathPrefix": "/"
+              "pathPrefix": "/post"
             },
             {
               "scheme": "https",
               "host": "www.pentasent.com",
-              "pathPrefix": "/"
+              "pathPrefix": "/post"
             }
           ],
           "category": [

@@ -9,9 +9,9 @@ export interface MoodConfig {
 }
 
 export const MOODS: MoodConfig[] = [
-    { tag: 'happy', label: 'Happy', emoji: '😊', score: 5, color: '#FFD700' },
-    { tag: 'calm', label: 'Calm', emoji: '😌', score: 4, color: '#A8DADC' },
-    { tag: 'neutral', label: 'Neutral', emoji: '😐', score: 3, color: '#BDBDBD' },
+    { tag: 'happy', label: 'Happy', emoji: '😊', score: 5, color: '#FFB800' },
+    { tag: 'calm', label: 'Calm', emoji: '😌', score: 4, color: '#72B9BD' },
+    { tag: 'neutral', label: 'Neutral', emoji: '😐', score: 3, color: '#94A3B8' },
     { tag: 'sad', label: 'Sad', emoji: '😔', score: 1, color: '#457B9D' },
     { tag: 'anxious', label: 'Anxious', emoji: '😰', score: 2, color: '#E9C46A' },
     { tag: 'tired', label: 'Tired', emoji: '😴', score: 2, color: '#6D6875' },
