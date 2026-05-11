@@ -132,11 +132,10 @@ function RootLayoutNav() {
       if (parsed.path && parsed.path.startsWith('post/')) {
         const targetRoute = `/${parsed.path}`;
 
-        // If ready to navigate right now
-        if (user && (user as any).is_onboarded) {
-          router.push(targetRoute as any); // use push instead of replace to allow back button to feed
-        } else {
-          // Save for later once they log in and onboard
+        // ONLY save as pending if the user is NOT ready (redirecting to login/onboarding)
+        // If they ARE ready, Expo Router handles the navigation automatically.
+        // Manual push here causes a "double-push" bug.
+        if (!user || !(user as any).is_onboarded) {
           setPendingDeepLinkRoute(targetRoute);
         }
       }

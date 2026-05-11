@@ -7,6 +7,7 @@ import {
     Platform,
     ScrollView,
     Animated,
+    Keyboard,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -88,6 +89,7 @@ export default function VerifyOtpScreen() {
     };
 
     const handleVerify = async () => {
+        Keyboard.dismiss();
         setErrorMsg(null);
         if (!otp || otp.length !== 6) {
             setErrorMsg('Please enter a valid 6-digit confirmation code.');

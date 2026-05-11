@@ -292,8 +292,13 @@ export default function JournalScreen() {
                     )}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
-                            <BookOpen size={48} color={colors.textLight} />
-                            <Text style={styles.emptyText}>Start your first journal entry.</Text>
+                            <View style={styles.emptyIconContainer}>
+                                <BookOpen size={40} color={colors.primary} />
+                            </View>
+                            <Text style={styles.emptyTitle}>Begin Your Journey</Text>
+                            <Text style={styles.emptyText}>
+                                Capture your thoughts, feelings, and moments. Start your mindfulness journey with your first entry.
+                            </Text>
                             <TouchableOpacity
                                 style={styles.emptyButton}
                                 onPress={() => {
@@ -341,7 +346,7 @@ export default function JournalScreen() {
                 />
             )}
             {/* Floating Action Button */}
-            {canCreate && (
+            {canCreate && sections.length > 0 && !loading && (
                 <View style={styles.fabContainer} pointerEvents="box-none">
                     <TouchableOpacity
                         style={styles.fab}
@@ -577,22 +582,46 @@ const styles = StyleSheet.create({
     emptyContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: 100,
-        gap: 16,
+        marginTop: 80,
+        paddingHorizontal: spacing.xxl,
+    },
+    emptyIconContainer: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: colors.primaryLight,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: spacing.lg,
+    },
+    emptyTitle: {
+        ...typography.h3,
+        color: colors.text,
+        marginBottom: spacing.xs,
+        textAlign: 'center',
     },
     emptyText: {
-        fontSize: 16,
+        fontSize: 14,
         color: colors.textMuted,
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: spacing.xl,
     },
     emptyButton: {
-        paddingHorizontal: 24,
-        paddingVertical: 12,
+        paddingHorizontal: 28,
+        paddingVertical: 14,
         backgroundColor: colors.primary,
-        borderRadius: borderRadius.md,
+        borderRadius: 30,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     emptyButtonText: {
         color: 'white',
-        fontWeight: '600',
+        fontWeight: '700',
+        fontSize: 15,
     },
 
     // Load More

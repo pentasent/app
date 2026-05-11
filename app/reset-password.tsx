@@ -8,6 +8,7 @@ import {
     ScrollView,
     TouchableOpacity,
     Animated,
+    Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -114,6 +115,7 @@ export default function ResetPasswordScreen() {
 
     // Stage 1: Request OTP
     const handleRequestOTP = async () => {
+        Keyboard.dismiss();
         setErrorMsg(null);
         setSuccessMsg(null);
 
@@ -158,6 +160,7 @@ export default function ResetPasswordScreen() {
 
     // Stage 2: Verify OTP
     const handleVerifyOTP = async () => {
+        Keyboard.dismiss();
         setErrorMsg(null);
         setSuccessMsg(null);
 
@@ -187,6 +190,7 @@ export default function ResetPasswordScreen() {
 
     // Stage 3: Reset Password
     const handleResetPassword = async () => {
+        Keyboard.dismiss();
         setErrorMsg(null);
         setSuccessMsg(null);
 

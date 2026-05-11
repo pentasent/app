@@ -152,6 +152,61 @@ export const MoodCheckInSheet: React.FC<MoodCheckInSheetProps> = ({
     const [notes, setNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+    const fadeAnim = React.useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (visible) {
+            // Soft entry: Slide up and Fade in
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 350,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(slideAnim, {
+                    toValue: 0,
+                    duration: 450,
+                    // Use a slightly bouncy/soft cubic bezier for premium feel
+                    easing: (t) => t * (2 - t), 
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        } else {
+            // Exit: Slide down and Fade out
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 0,
+                    duration: 250,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(slideAnim, {
+                    toValue: SCREEN_HEIGHT,
+                    duration: 300,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        }
+    }, [visible]);
+
+    const handleClose = () => {
+        // Run exit animation before calling parent onClose
+        Animated.parallel([
+            Animated.timing(fadeAnim, {
+                toValue: 0,
+                duration: 250,
+                useNativeDriver: true,
+            }),
+            Animated.timing(slideAnim, {
+                toValue: SCREEN_HEIGHT,
+                duration: 300,
+                useNativeDriver: true,
+            }),
+        ]).start(() => {
+            onClose();
+        });
+    };
+
     useEffect(() => {
         if (initialMood) {
             setMood(initialMood);
@@ -181,116 +236,127 @@ export const MoodCheckInSheet: React.FC<MoodCheckInSheetProps> = ({
         <Modal
             visible={visible}
             transparent
-            animationType="slide"
-            onRequestClose={onClose}
+            animationType="none"
+            onRequestClose={handleClose}
             statusBarTranslucent
         >
-            <View style={styles.overlay}>
-                {/* Transparent Top Space */}
-                <Pressable style={styles.dismissArea} onPress={onClose} />
+            <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+                {/* Transparent Top Space to dismiss */}
+                <Pressable style={{ flex: 1 }} onPress={handleClose} />
                 
-                <KeyboardShiftView 
-                    style={styles.sheetContainer}
+                <Animated.View 
+                    style={{
+                        transform: [{ translateY: slideAnim }],
+                        width: '100%',
+                        height: SCREEN_HEIGHT * 0.8,
+                        backgroundColor: colors.background,
+                        borderTopLeftRadius: 28,
+                        borderTopRightRadius: 28,
+                        overflow: 'hidden',
+                        paddingTop: spacing.lg,
+                    }}
                 >
-                    <View style={styles.sheet}>
-                        <View style={styles.header}>
-                            <View style={styles.headerTitleContainer}>
-                                <View style={styles.iconCircle}>
-                                    <Calendar size={18} color={colors.primary} />
-                                </View>
-                                <View>
-                                    <Text style={styles.headerTitle}>Daily Check-in</Text>
-                                    <Text style={styles.headerSubtitle}>How are you feeling, {user?.name || 'there'}?</Text>
-                                </View>
-                            </View>
-                            {/* <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                                <X size={20} color={colors.text} />
-                            </TouchableOpacity> */}
-                        </View>
-
-                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                            {/* Mood Selection */}
-                            <Text style={styles.sectionLabel}>YOUR MOOD</Text>
-                            <View style={styles.fullWidthMoodSection}>
-                                <ScrollView
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    contentContainerStyle={styles.moodScroll}
-                                >
-                                {MOODS.map((m) => (
-                                    <View key={m.tag} style={{ marginRight: spacing.sm }}>
-                                        <MoodSquare
-                                            mood={m}
-                                            selected={mood === m.tag}
-                                            onPress={() => setMood(m.tag)}
-                                            size={90}
-                                        />
+                    <KeyboardShiftView style={{ flex: 1 }}>
+                        <View style={{ flex: 1 }}>
+                            {/* Header */}
+                            <View style={styles.header}>
+                                <View style={styles.headerTitleContainer}>
+                                    <View style={styles.iconCircle}>
+                                        <Calendar size={18} color={colors.primary} />
                                     </View>
-                                ))}
-                                </ScrollView>
-                            </View>
-
-                            {/* Custom Sliders */}
-                            <View style={styles.sliderGroup}>
-                                <SliderControl
-                                    label="Energy Level"
-                                    value={energy}
-                                    onValueChange={setEnergy}
-                                    config={ENERGY_LEVELS}
-                                    type="energy"
-                                />
-                                <SliderControl
-                                    label="Stress Level"
-                                    value={stress}
-                                    onValueChange={setStress}
-                                    config={STRESS_LEVELS}
-                                    type="stress"
-                                />
-                                <SliderControl
-                                    label="Sleep Quality"
-                                    value={sleep}
-                                    onValueChange={setSleep}
-                                    config={SLEEP_QUALITY}
-                                    type="sleep"
-                                />
-                            </View>
-
-                            {/* Notes */}
-                            <Text style={styles.sectionLabel}>NOTES (OPTIONAL)</Text>
-                            <TextInput
-                                style={styles.notesInput}
-                                placeholder="What's on your mind?"
-                                placeholderTextColor={colors.textMuted}
-                                value={notes}
-                                onChangeText={setNotes}
-                                multiline
-                                numberOfLines={4}
-                                textAlignVertical="top"
-                            />
-
-                        </ScrollView>
-                    </View>
-
-                    {/* Sticky Footer for Button - Fixed over Safe Area */}
-                    <SafeAreaView edges={['bottom']} style={styles.footer}>
-                        <TouchableOpacity 
-                            style={[styles.submitButton, isSubmitting && { opacity: 0.8 }]}
-                            onPress={handleSubmit}
-                            disabled={isSubmitting}
-                            activeOpacity={0.8}
-                        >
-                            {isSubmitting ? (
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 8 }} />
-                                    <Text style={styles.submitButtonText}>Saving...</Text>
+                                    <View>
+                                        <Text style={styles.headerTitle}>Daily Check-in</Text>
+                                        <Text style={styles.headerSubtitle}>How are you feeling, {user?.name || 'there'}?</Text>
+                                    </View>
                                 </View>
-                            ) : (
-                                <Text style={styles.submitButtonText}>Complete Check-in</Text>
-                            )}
-                        </TouchableOpacity>
-                    </SafeAreaView>
-                </KeyboardShiftView>
-            </View>
+                            </View>
+
+                            {/* Main Content */}
+                            <ScrollView 
+                                style={{ flex: 1 }} 
+                                contentContainerStyle={styles.scrollContent}
+                                showsVerticalScrollIndicator={false}
+                                keyboardShouldPersistTaps="handled"
+                            >
+                                <Text style={styles.sectionLabel}>YOUR MOOD</Text>
+                                <View style={styles.fullWidthMoodSection}>
+                                    <ScrollView
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        contentContainerStyle={styles.moodScroll}
+                                    >
+                                        {MOODS.map((m) => (
+                                            <View key={m.tag} style={{ marginRight: spacing.sm }}>
+                                                <MoodSquare
+                                                    mood={m}
+                                                    selected={mood === m.tag}
+                                                    onPress={() => setMood(m.tag)}
+                                                    size={90}
+                                                />
+                                            </View>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+
+                                <View style={styles.sliderGroup}>
+                                    <SliderControl
+                                        label="Energy Level"
+                                        value={energy}
+                                        onValueChange={setEnergy}
+                                        config={ENERGY_LEVELS}
+                                        type="energy"
+                                    />
+                                    <SliderControl
+                                        label="Stress Level"
+                                        value={stress}
+                                        onValueChange={setStress}
+                                        config={STRESS_LEVELS}
+                                        type="stress"
+                                    />
+                                    <SliderControl
+                                        label="Sleep Quality"
+                                        value={sleep}
+                                        onValueChange={setSleep}
+                                        config={SLEEP_QUALITY}
+                                        type="sleep"
+                                    />
+                                </View>
+
+                                <Text style={styles.sectionLabel}>NOTES (OPTIONAL)</Text>
+                                <TextInput
+                                    style={styles.notesInput}
+                                    placeholder="What's on your mind?"
+                                    placeholderTextColor={colors.textMuted}
+                                    value={notes}
+                                    onChangeText={setNotes}
+                                    multiline
+                                    numberOfLines={4}
+                                    textAlignVertical="top"
+                                />
+                            </ScrollView>
+
+                            {/* Footer */}
+                            <SafeAreaView edges={['bottom']} style={styles.footer}>
+                                <TouchableOpacity 
+                                    style={[styles.submitButton, isSubmitting && { opacity: 0.8 }]}
+                                    onPress={handleSubmit}
+                                    disabled={isSubmitting}
+                                    activeOpacity={0.8}
+                                >
+                                    {isSubmitting ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 8 }} />
+                                            <Text style={styles.submitButtonText}>Saving...</Text>
+                                        </View>
+                                    ) : (
+                                        <Text style={styles.submitButtonText}>Complete Check-in</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </SafeAreaView>
+                        </View>
+                    </KeyboardShiftView>
+                </Animated.View>
+            </Animated.View>
         </Modal>
     );
 };
@@ -323,7 +389,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: spacing.xl,
+        marginBottom: spacing.md,
+        marginTop: spacing.xs,
         paddingHorizontal: spacing.lg,
     },
     headerTitleContainer: {
@@ -358,7 +425,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     scrollContent: {
-        // paddingTop: spacing.sm,
+        paddingTop: spacing.sm,
         paddingHorizontal: spacing.lg,
     },
     sectionLabel: {

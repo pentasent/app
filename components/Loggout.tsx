@@ -9,11 +9,13 @@ import {
 import { useRouter } from 'expo-router';
 import { LogOut } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { useSession } from '../contexts/SessionContext';
 import { colors, spacing, borderRadius, typography, shadows } from '../constants/theme';
 
 export default function LoggoutButton() {
   const router = useRouter();
   const { logout } = useAuth();
+  const { resetSession } = useSession();
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -26,6 +28,7 @@ export default function LoggoutButton() {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
+      resetSession();
       await logout();
       setShowLogoutModal(false);
     } catch (error) {

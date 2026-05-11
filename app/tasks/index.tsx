@@ -189,7 +189,7 @@ export default function TasksScreen() {
         }
       }
 
-      DeviceEventEmitter.emit('task_update');
+      DeviceEventEmitter.emit('task_update', { ...task, ...updates });
 
     } catch (error) {
       console.log('[ERROR]:', 'Error toggling task:', error);
@@ -229,7 +229,7 @@ export default function TasksScreen() {
         activeOpacity={0.7}
       >
         <TouchableOpacity
-          style={[styles.checkboxContainer, isCompleted && { opacity: 0.5 }]}
+          style={[styles.checkboxContainer, isCompleted && { opacity: 0.8 }]}
           onPress={() => toggleTaskCompletion(item)}
           disabled={isCompleted} // Disable interaction if completed
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -355,9 +355,16 @@ export default function TasksScreen() {
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
-                <CheckSquare size={48} color={colors.textLight} />
+                <View style={styles.emptyIconContainer}>
+                  <CheckCircle2 size={40} color={colors.primary} />
+                </View>
+                <Text style={styles.emptyTitle}>
+                  {searchQuery ? 'No results found' : 'Ready to Focus?'}
+                </Text>
                 <Text style={styles.emptyText}>
-                  {searchQuery ? 'No matching tasks found.' : 'No tasks for today.'}
+                  {searchQuery 
+                    ? "We couldn't find any tasks matching your search. Try a different keyword." 
+                    : "Start your day by organizing your tasks. Let's make today productive and meaningful."}
                 </Text>
                 <TouchableOpacity
                   style={styles.emptyButton}
@@ -378,7 +385,7 @@ export default function TasksScreen() {
         )}
 
         {/* FAB */}
-        {canCreate && (
+        {canCreate && tasks.length > 0 && !loading && (
           <View style={styles.fabWrapper} pointerEvents="box-none">
             <TouchableOpacity
               style={styles.fab}
@@ -391,72 +398,74 @@ export default function TasksScreen() {
         )}
 
         {/* Bottom Section */}
-        <KeyboardShiftView style={styles.bottomContainer}>
+        {(tasks.length > 0 || searchQuery || filterPriority !== 'all') && !loading && (
+          <KeyboardShiftView style={styles.bottomContainer}>
 
-          {/* Search & Filters */}
-          <View style={styles.bottomBar}>
-            {showFilters && (
-              <View style={styles.filterOptions}>
-                <View style={styles.filterRow}>
-                  <Text style={styles.filterLabel}>Sort:</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
-                    {(['latest', 'oldest', 'priority'] as SortOption[]).map(opt => (
-                      <TouchableOpacity
-                        key={opt}
-                        style={[styles.chip, sortBy === opt && styles.chipActive]}
-                        onPress={() => setSortBy(opt)}
-                      >
-                        <Text style={[styles.chipText, sortBy === opt && styles.chipTextActive]}>
-                          {opt.charAt(0).toUpperCase() + opt.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+            {/* Search & Filters */}
+            <View style={styles.bottomBar}>
+              {showFilters && (
+                <View style={styles.filterOptions}>
+                  <View style={styles.filterRow}>
+                    <Text style={styles.filterLabel}>Sort:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
+                      {(['latest', 'oldest', 'priority'] as SortOption[]).map(opt => (
+                        <TouchableOpacity
+                          key={opt}
+                          style={[styles.chip, sortBy === opt && styles.chipActive]}
+                          onPress={() => setSortBy(opt)}
+                        >
+                          <Text style={[styles.chipText, sortBy === opt && styles.chipTextActive]}>
+                            {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                  <View style={styles.filterRow}>
+                    <Text style={styles.filterLabel}>Priority:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
+                      {(['all', 'high', 'medium', 'low'] as FilterPriority[]).map(p => (
+                        <TouchableOpacity
+                          key={p}
+                          style={[styles.chip, filterPriority === p && styles.chipActive]}
+                          onPress={() => setFilterPriority(p)}
+                        >
+                          <Text style={[styles.chipText, filterPriority === p && styles.chipTextActive]}>
+                            {p.charAt(0).toUpperCase() + p.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
                 </View>
-                <View style={styles.filterRow}>
-                  <Text style={styles.filterLabel}>Priority:</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
-                    {(['all', 'high', 'medium', 'low'] as FilterPriority[]).map(p => (
-                      <TouchableOpacity
-                        key={p}
-                        style={[styles.chip, filterPriority === p && styles.chipActive]}
-                        onPress={() => setFilterPriority(p)}
-                      >
-                        <Text style={[styles.chipText, filterPriority === p && styles.chipTextActive]}>
-                          {p.charAt(0).toUpperCase() + p.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
-            )}
+              )}
 
-            <View style={styles.searchContainer}>
-              <View style={styles.searchBar}>
-                <Search size={20} color={colors.textLight} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search tasks..."
-                  placeholderTextColor={colors.textLight}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <X size={16} color={colors.textLight} />
-                  </TouchableOpacity>
-                )}
+              <View style={styles.searchContainer}>
+                <View style={styles.searchBar}>
+                  <Search size={20} color={colors.textLight} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search tasks..."
+                    placeholderTextColor={colors.textLight}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <X size={16} color={colors.textLight} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={[styles.filterBtn, (showFilters || filterPriority !== 'all' || sortBy !== 'latest') && styles.filterBtnActive]}
+                  onPress={() => setShowFilters(!showFilters)}
+                >
+                  <Filter size={20} color={colors.text} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={[styles.filterBtn, (showFilters || filterPriority !== 'all' || sortBy !== 'latest') && styles.filterBtnActive]}
-                onPress={() => setShowFilters(!showFilters)}
-              >
-                <Filter size={20} color={colors.text} />
-              </TouchableOpacity>
             </View>
-          </View>
-        </KeyboardShiftView>
+          </KeyboardShiftView>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -724,8 +733,8 @@ const styles = StyleSheet.create({
     // elevation: 1,
   },
   cardCompleted: {
-    opacity: 0.6,
-    backgroundColor: colors.background,
+    opacity: 0.8,
+    backgroundColor: colors.textMuted + "10",
   },
   checkboxContainer: {
     padding: 4,
@@ -782,21 +791,45 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 60,
-    gap: 16,
+    marginTop: 80,
+    paddingHorizontal: spacing.xxl,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  emptyTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: spacing.xl,
   },
   emptyButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
+    borderRadius: 30,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   emptyButtonText: {
     color: 'white',
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

@@ -1,5 +1,5 @@
 import { CustomImage as Image } from '@/components/CustomImage';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, ScrollView, Alert, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { useState } from 'react';
 import { ArrowLeft, Image as ImageIcon, ChevronDown, Check, X } from 'lucide-react-native';
 import { colors } from '../../constants/theme';
@@ -64,6 +64,7 @@ export const CreatePostDialog = ({ visible, onClose, onSubmit, communities, chan
     };
 
     const handleSubmit = async () => {
+        Keyboard.dismiss();
         if (!selectedCommunityId) {
             setToastMsg('Please select a community to post in.');
             return;

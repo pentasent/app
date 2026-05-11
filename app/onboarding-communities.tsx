@@ -13,10 +13,12 @@ import { OnboardingCommunityShimmer } from '../components/shimmers/OnboardingCom
 import { trackEvent } from '../lib/analytics/track';
 import { getImageUrl } from '@/utils/get-image-url';
 import crashlytics from '@/lib/crashlytics';
+import { useSession } from '@/contexts/SessionContext';
 
 export default function OnboardingCommunitiesScreen() {
     const { user, refreshUser } = useAuth();
     const { refreshFeed } = useFeed();
+    const { setFeedAlreadyLoaded } = useSession();
     const router = useRouter();
     const [communities, setCommunities] = useState<Community[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -26,6 +28,27 @@ export default function OnboardingCommunitiesScreen() {
     const [activeShowcaseIndex, setActiveShowcaseIndex] = useState(0);
     const showcaseOpacity = useRef(new Animated.Value(1)).current;
     const showcaseTranslateX = useRef(new Animated.Value(0)).current;
+    const pulseAnim = useRef(new Animated.Value(0.4)).current;
+
+    // Start pulsing animation for status text
+    useEffect(() => {
+        if (showWelcomeModal) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, {
+                        toValue: 1,
+                        duration: 1500,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(pulseAnim, {
+                        toValue: 0.4,
+                        duration: 1500,
+                        useNativeDriver: true,
+                    }),
+                ])
+            ).start();
+        }
+    }, [showWelcomeModal]);
     const exitFade = useRef(new Animated.Value(1)).current;
 
     const runShowcaseTransition = (index: number) => {
@@ -228,19 +251,37 @@ export default function OnboardingCommunitiesScreen() {
             // Successfully onboarded, refresh user context, feed context, and go to tabs
             trackEvent('onboarding_completed');
             await refreshUser();
-            // Trigger feed refresh in the background so it starts loading 
-            // while we transition to the tabs.
-            refreshFeed();
+
+            // PRE-WARM FEED:
+            // Explicitly fetch metadata and posts while the "Getting ready" screen is still visible
+            // This prevents the "blank filter" and "white screen" bugs on first landing.
+            const { useFeedStore } = require('../stores/useFeedStore');
+            const feedStore = useFeedStore.getState();
             
-            // Silken Exit Transition: Fade out before navigation for premium feel
+            await Promise.all([
+                feedStore.fetchCommunitiesAndChannels(user.id),
+                feedStore.fetchPosts(true)
+            ]);
+            
+            // 3. Mark as loaded in session so Feed shows up instantly without "fade from 0"
+            setFeedAlreadyLoaded(true);
+
+            // Silken Overlap Transition: 
+            // We fade out the modal while SIMULTANEOUSLY replacing the screen.
+            // This prevents the "sudden cut" and the "white screen" gap.
             Animated.timing(exitFade, {
                 toValue: 0,
-                duration: 600,
+                duration: 400,
                 useNativeDriver: true
-            }).start(() => {
-                setShowWelcomeModal(false);
+            }).start();
+            
+            // Wait 100ms for state to stabilize before navigating
+            setTimeout(() => {
+                // We DO NOT call setShowWelcomeModal(false) here because 
+                // it would reveal the "Find Your Tribes" list for a split second 
+                // before the navigation happens (causing a flicker).
                 router.replace('/(tabs)');
-            });
+            }, 100);
         } catch (e: any) {
             console.log('[ERROR]:', 'Join error:', e);
             crashlytics().recordError(e);
@@ -327,7 +368,9 @@ export default function OnboardingCommunitiesScreen() {
                                 
                                 <View style={styles.sanctuaryStatusArea}>
                                     <Text style={styles.sanctuaryUserName}>{user?.name?.split(' ')[0] || 'Explorer'}</Text>
-                                    <Text style={styles.sanctuaryStatus}>Getting ready your space...</Text>
+                                    <Animated.Text style={[styles.sanctuaryStatus, { opacity: pulseAnim }]}>
+                                        Getting ready your space...
+                                    </Animated.Text>
                                 </View>
                             </View>
                         </SafeAreaView>

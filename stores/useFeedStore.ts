@@ -42,6 +42,7 @@ interface FeedState {
   // Cache
   loadCache: () => Promise<void>;
   saveCache: () => Promise<void>;
+  clearStore: () => void;
 }
 
 export const useFeedStore = create<FeedState>((set, get) => ({
@@ -261,5 +262,21 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       const { posts } = get();
       await AsyncStorage.setItem('cached_feed_posts', JSON.stringify(posts.slice(0, 20)));
     } catch (e) {}
+  },
+
+  clearStore: () => {
+    set({
+      posts: [],
+      loading: true,
+      refreshing: false,
+      loadingMore: false,
+      hasMorePosts: true,
+      pendingPostsCount: 0,
+      lastNewPostTimestamp: null,
+      communities: [],
+      channels: [],
+      selectedCommunityId: null,
+      lastCursor: null,
+    });
   }
 }));

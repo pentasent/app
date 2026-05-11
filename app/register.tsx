@@ -6,7 +6,8 @@ import {
   ScrollView,
   Animated,
   TouchableOpacity,
-  Linking
+  Linking,
+  Keyboard
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -120,6 +121,7 @@ export default function RegisterScreen() {
   }, [params.ref]);
 
   const handleRegister = async () => {
+    Keyboard.dismiss();
     setErrorMsg(null);
     if (!email || !password || !confirmPassword) {
       setErrorMsg('Please fill in all fields');

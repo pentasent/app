@@ -1,10 +1,10 @@
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
-import { ErrorBoundary } from 'react-error-boundary';
+import { ErrorBoundary, FallbackProps } from 'react-error-boundary';
 import { AlertCircle, RotateCcw } from 'lucide-react-native';
 import { colors, spacing, borderRadius, shadows } from '../constants/theme';
 import * as Updates from 'expo-updates';
 
-function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const handleReload = async () => {
       try {
           await Updates.reloadAsync();
@@ -26,7 +26,9 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
         
         <View style={styles.errorBox}>
           <Text style={styles.errorTitle}>Error Details:</Text>
-          <Text style={styles.errorText} numberOfLines={3}>{error.message}</Text>
+          <Text style={styles.errorText} numberOfLines={3}>
+            {error instanceof Error ? error.message : String(error)}
+          </Text>
         </View>
 
         <TouchableOpacity 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, DeviceEventEmitter, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, DeviceEventEmitter, Modal, Keyboard } from 'react-native';
 import crashlytics from '@/lib/crashlytics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext'; // imports might vary based on your structure
@@ -86,6 +86,7 @@ export default function JournalEntryScreen() {
     };
 
     const handleSave = async () => {
+        Keyboard.dismiss();
         if (!user || !user.id) {
             console.log('[ERROR]:', 'No authenticated user found!');
             setToastType('error');

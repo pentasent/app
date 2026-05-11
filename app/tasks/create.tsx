@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, DeviceEventEmitter, Alert, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, DeviceEventEmitter, Alert, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
 import crashlytics from '@/lib/crashlytics';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../contexts/AuthContext';
@@ -71,6 +71,7 @@ export default function CreateTaskScreen() {
     };
 
     const handleCreateOption = async () => {
+        Keyboard.dismiss();
         if (!title.trim()) {
             setToastMsg('Please enter a task title');
             return;

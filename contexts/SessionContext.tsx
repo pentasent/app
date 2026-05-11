@@ -7,6 +7,7 @@ interface SessionContextType {
   setHasSeenWelcome: (value: boolean) => void;
   lastVisitedTab: string | null;
   setLastVisitedTab: (tab: string) => void;
+  resetSession: () => void;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -28,6 +29,12 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     _setLastVisitedTab(tab);
   }, []);
 
+  const resetSession = useCallback(() => {
+    setIsFeedAlreadyLoaded(false);
+    _setHasSeenWelcome(false);
+    _setLastVisitedTab(null);
+  }, []);
+
   return (
     <SessionContext.Provider
       value={{
@@ -37,6 +44,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setHasSeenWelcome,
         lastVisitedTab,
         setLastVisitedTab,
+        resetSession,
       }}
     >
       {children}

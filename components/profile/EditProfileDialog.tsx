@@ -1,7 +1,7 @@
 import { CustomImage as Image } from '@/components/CustomImage';
 import { Toast } from '@/components/Toast';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, ScrollView, Alert, Platform, FlatList, KeyboardAvoidingView } from 'react-native';
-import { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput, ScrollView, Alert, Platform, FlatList, KeyboardAvoidingView, Keyboard } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Camera, X, ChevronDown, Check } from 'lucide-react-native';
 import { colors, borderRadius, spacing } from '../../constants/theme';
 import { StatusBar } from 'expo-status-bar';
@@ -69,8 +69,20 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
 
     const { updateProfile } = useAuth();
     const { showToast } = useApp();
+    const mounted = useRef(true);
+    const isSubmitting = useRef(false);
+
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
 
     const handleSubmit = async () => {
+        if (isSubmitting.current) return;
+        Keyboard.dismiss();
+        
         if (!currentUser) return;
         if (!name.trim()) {
             setToastMsg('Name cannot be empty.');
@@ -86,6 +98,8 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
         }
 
         setLoading(true);
+        isSubmitting.current = true;
+        
         try {
             await updateProfile({
                 name: name.trim(),
@@ -94,15 +108,22 @@ export const EditProfileDialog = ({ visible, onClose, currentUser, onUpdate }: E
                 avatar_uri: avatarUrl === currentUser.avatar_url ? undefined : avatarUrl || undefined
             });
 
-            onUpdate(); // Refresh stats in parent
-            showToast('Profile updated successfully.', 'success');
-            handleClose();
+            if (mounted.current) {
+                onUpdate(); // Refresh stats in parent
+                showToast('Profile updated successfully.', 'success');
+                handleClose();
+            }
 
         } catch (error: any) {
-            setToastMsg(error.message || 'Failed to update profile.');
+            if (mounted.current) {
+                setToastMsg(error.message || 'Failed to update profile.');
+            }
             console.log('[ERROR]:', error);
         } finally {
-            setLoading(false);
+            if (mounted.current) {
+                setLoading(false);
+                isSubmitting.current = false;
+            }
         }
     };
 

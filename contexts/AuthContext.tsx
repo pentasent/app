@@ -330,10 +330,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
+      // 1. Clear Zustand Stores
+      const { useFeedStore } = require('../stores/useFeedStore');
+      useFeedStore.getState().clearStore();
+
+      // 2. Clear all AsyncStorage (Cache, Tokens, etc.)
+      await AsyncStorage.clear();
+
+      // 3. Supabase SignOut
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch (err) {
-      // console.log('[AuthContext] logout error:', err);
+      console.error('[AuthContext] logout error:', err);
       throw err;
     }
   };

@@ -1021,7 +1021,6 @@ const styles = StyleSheet.create({
     },
     disabledSection: {
         // opacity: 0.6,
-        pointerEvents: 'none',
     },
     modalOverlay: {
         flex: 1,

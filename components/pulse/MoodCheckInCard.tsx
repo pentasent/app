@@ -8,11 +8,24 @@ interface MoodCheckInCardProps {
     onMoodSelect: (mood: MoodConfig) => void;
     onHeaderPress?: () => void;
     scrollY?: Animated.Value;
+    skipAnimation?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export const MoodCheckInCard: React.FC<MoodCheckInCardProps> = React.memo(({ onMoodSelect, onHeaderPress, scrollY }) => {
+export const MoodCheckInCard: React.FC<MoodCheckInCardProps> = React.memo(({ onMoodSelect, onHeaderPress, scrollY, skipAnimation }) => {
+    const fadeAnim = React.useRef(new Animated.Value(skipAnimation ? 1 : 0)).current;
+
+    React.useEffect(() => {
+        if (!skipAnimation) {
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 400,
+                useNativeDriver: true,
+            }).start();
+        }
+    }, [skipAnimation]);
+
     // Scroll Interpolations
     const opacity = scrollY?.interpolate({
         inputRange: [0, 40],
@@ -44,11 +57,11 @@ export const MoodCheckInCard: React.FC<MoodCheckInCardProps> = React.memo(({ onM
             style={[
                 styles.container,
                 {
-                    opacity: scrollY?.interpolate({
+                    opacity: Animated.multiply(fadeAnim, scrollY?.interpolate({
                          inputRange: [0, 150],
                          outputRange: [1, 0.4],
                          extrapolate: 'clamp'
-                    }) || 1,
+                    }) || 1),
                     height: 180, // Fixed height for parallax space
                     transform: [{
                         translateY: scrollY?.interpolate({

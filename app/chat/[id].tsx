@@ -47,39 +47,21 @@ type MessageWithUser = CommunityChatMessage & {
 };
 
 // Helper to render text with links
-const renderTextWithLinks = (text: string, style: any, isMe: boolean, router: any) => {
+const renderTextWithLinks = (text: string, style: any, isMe: boolean, onLinkPress: (url: string) => void) => {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
   return (
     <Text style={style}>
       {parts.map((part, index) => {
         if (part.match(urlRegex)) {
-          const handlePress = () => {
-            if (part.includes('pentasent.com/post/')) {
-              const postId = part.split('/post/')[1]?.split(/[?#]/)[0];
-              if (postId) {
-                router.push(`/post/${postId}`);
-                return;
-              }
-            }
-            if (part.includes('pentasent.com/articles/')) {
-              const slug = part.split('/articles/')[1]?.split(/[?#]/)[0];
-              if (slug) {
-                router.push(`/articles/${slug}`);
-                return;
-              }
-            }
-            Linking.openURL(part);
-          };
-
           return (
             <Text
               key={index}
               style={[style, {
-                color: isMe ? '#fff1f6' : colors.primary, // 👈 changed
+                color: isMe ? '#fff1f6' : colors.primary,
                 textDecorationLine: 'underline',
               }]}
-              onPress={handlePress}
+              onPress={() => onLinkPress(part)}
             >
               {part}
             </Text>
@@ -95,6 +77,35 @@ export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams();
   const chatId = Array.isArray(id) ? id[0] : (id as string);
   const router = useRouter();
+  const isNavigating = useRef(false);
+
+  const safePush = (route: string) => {
+    if (isNavigating.current) return;
+    isNavigating.current = true;
+    router.push(route as any);
+    setTimeout(() => {
+      isNavigating.current = false;
+    }, 500);
+  };
+
+  const handleLinkPress = (url: string) => {
+    if (url.includes('pentasent.com/post/')) {
+      const postId = url.split('/post/')[1]?.split(/[?#]/)[0];
+      if (postId) {
+        safePush(`/post/${postId}`);
+        return;
+      }
+    }
+    if (url.includes('pentasent.com/articles/')) {
+      const slug = url.split('/articles/')[1]?.split(/[?#]/)[0];
+      if (slug) {
+        safePush(`/articles/${slug}`);
+        return;
+      }
+    }
+    Linking.openURL(url);
+  };
+
   const { user, isRealtimeReady } = useAuth();
   const [chat, setChat] = useState<CommunityChat | null>(null);
   const [messages, setMessages] = useState<MessageWithUser[]>([]);
@@ -787,7 +798,7 @@ export default function ChatDetailScreen() {
             {renderTextWithLinks(item.message_text, [
               styles.messageText,
               isMe ? styles.myMessageText : styles.theirMessageText
-            ], isMe, router)}
+            ], isMe, handleLinkPress)}
 
             <View style={styles.metaRow}>
               <Text style={[

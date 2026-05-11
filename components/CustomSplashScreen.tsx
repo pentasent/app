@@ -84,7 +84,7 @@ export const CustomSplashScreen = ({ isReady }: CustomSplashScreenProps) => {
         
         if (visible && !isReady) {
             failsafeTimer = setTimeout(() => {
-                console.log('[DEBUG]: Splash screen failsafe triggered');
+                // console.log('[DEBUG]: Splash screen failsafe triggered');
                 setVisible(false);
                 hasShownSplashGlobal = true;
             }, 15000);

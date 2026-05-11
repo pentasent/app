@@ -5,7 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
-  TouchableOpacity
+  TouchableOpacity,
+  Keyboard
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
@@ -57,6 +58,7 @@ export default function LoginScreen() {
 
 
   const handleLogin = async () => {
+    Keyboard.dismiss();
     setErrorMsg(null);
     if (!email || !password) {
       setErrorMsg('Please fill in all fields');

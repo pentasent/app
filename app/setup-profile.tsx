@@ -9,6 +9,7 @@ import {
     TouchableOpacity,
     Modal,
     FlatList,
+    Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth, supabase } from '../contexts/AuthContext';
@@ -79,6 +80,7 @@ export default function SetupProfileScreen() {
     const isFormValid = name.trim().length > 0 && bio.trim().length >= 20 && country !== null && avatarUrl !== null;
 
     const handleSubmit = async () => {
+        Keyboard.dismiss();
         setErrorMsg(null);
         if (!isFormValid) {
             setErrorMsg('All fields are required, and bio must be at least 20 characters.');

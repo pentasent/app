@@ -406,14 +406,17 @@ export default function BubbleRushPlay() {
     const goDashboard = () => {
         if (isNavigating.current) return;
         isNavigating.current = true;
+        
         if (router.canGoBack()) {
             router.back();
         } else {
             router.replace('/games/bubble-rush');
         }
+
+        // Failsafe to allow navigation again after a delay
         setTimeout(() => {
             isNavigating.current = false;
-        }, 500);
+        }, 800);
     };
 
     return (

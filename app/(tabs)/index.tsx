@@ -69,29 +69,48 @@ export default function CommunityFeedScreen() {
   const { supabase } = require('../../contexts/AuthContext');
 
   // Mood Check-in State
+  const { isFeedAlreadyLoaded, setFeedAlreadyLoaded } = useSession();
   const [showCheckinCard, setShowCheckinCard] = useState(false);
   const [showCheckinSheet, setShowCheckinSheet] = useState(false);
   const [selectedInitialMood, setSelectedInitialMood] = useState<MoodTag | undefined>(undefined);
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState<Suggestion | null>(null);
   const [lastSubmittedMood, setLastSubmittedMood] = useState<MoodTag | null>(null);
-  const [isCheckinStatusLoading, setIsCheckinStatusLoading] = useState(true);
+  
+  // If coming from onboarding pre-warm, we skip the initial loading state to prevent flickering
+  const [isCheckinStatusLoading, setIsCheckinStatusLoading] = useState(isFeedAlreadyLoaded ? false : true);
   const [canInteractWithMood, setCanInteractWithMood] = useState(true);
   const [showExitModal, setShowExitModal] = useState(false);
   const verticalText = "CHECKIN".split("").join("\n");
  
-  const { isFeedAlreadyLoaded, setFeedAlreadyLoaded } = useSession();
-
   // Unified Direct Loading: Shimmer on first cold-load, Direct on return.
   const [hasCompletedInitialLoad, setHasCompletedInitialLoad] = useState(isFeedAlreadyLoaded);
 
   useEffect(() => {
-    // Once loading finishes for the very first time in this session, mark as loaded.
-    if (!loading && posts.length > 0 && !hasCompletedInitialLoad) {
+    // 1. LOADING START: If we start loading and have no posts (e.g. filter change), 
+    // we reset the animation to show the shimmer again.
+    if (loading && posts.length === 0 && hasCompletedInitialLoad) {
+      setHasCompletedInitialLoad(false);
+      Animated.timing(feedFadeAnim, {
+        toValue: 0,
+        duration: 200, // Faster fade-out for filters
+        useNativeDriver: true,
+      }).start();
+    }
+
+    // 2. LOADING END: Once loading finishes and we have checkin status, mark as loaded.
+    // This triggers the fade-in of the content and fade-out of the shimmer.
+    if (!loading && !hasCompletedInitialLoad && !isCheckinStatusLoading) {
       setHasCompletedInitialLoad(true);
       setFeedAlreadyLoaded(true);
+      
+      Animated.timing(feedFadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
     }
-  }, [loading, posts.length, hasCompletedInitialLoad]);
+  }, [loading, hasCompletedInitialLoad, isCheckinStatusLoading, posts.length]);
 
   
   const isNavigating = useRef(false);
@@ -104,8 +123,9 @@ export default function CommunityFeedScreen() {
       isNavigating.current = false;
     }, 500);
   };
-
   const [hasUserScrolled, setHasUserScrolled] = useState(false);
+  const feedFadeAnim = useRef(new Animated.Value(isFeedAlreadyLoaded ? 1 : 0)).current;
+
   useEffect(() => {
     const id = scrollY.addListener(({ value }) => {
       if (value > 5 && !hasUserScrolled) setHasUserScrolled(true);
@@ -275,9 +295,59 @@ export default function CommunityFeedScreen() {
     router.push(suggestion.route as any);
   };
 
+  const HeaderContent = React.useMemo(() => {
+    if (showCheckinCard) {
+      return (
+        <MoodCheckInCard
+          onMoodSelect={handleMoodSelect}
+          onHeaderPress={() => setShowCheckinSheet(true)}
+          scrollY={scrollY}
+          skipAnimation={isFeedAlreadyLoaded}
+        />
+      );
+    }
+    if (lastSubmittedMood) {
+      return (
+        <View style={styles.actionCardContainer}>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push('/pulse')}
+          >
+            <View style={styles.actionCardContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                <Text style={styles.actionCardTitle}>Your mood today: </Text>
+                <View style={{ marginHorizontal: 4 }}>
+                  <MoodIcon 
+                    tag={lastSubmittedMood} 
+                    color={MOODS.find(m => m.tag === lastSubmittedMood)?.color || colors.primary} 
+                    selected={true} 
+                    size={14} 
+                  />
+                </View>
+                <Text style={styles.actionCardTitle}>
+                  {lastSubmittedMood.charAt(0).toUpperCase() + lastSubmittedMood.slice(1)}
+                </Text>
+              </View>
+              <Text style={styles.actionCardSubtitle}>See your pulse insights</Text>
+            </View>
+            <TrendingUp size={20} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return null;
+  }, [showCheckinCard, lastSubmittedMood, scrollY, handleMoodSelect]);
+
   const MemoizedHeader = React.useMemo(() => {
-    if (isCheckinStatusLoading) return null;
-    if (!showCheckinCard && !lastSubmittedMood) return null;
+    // Determine the inner content
+    let content = null;
+    if (isCheckinStatusLoading && !hasCompletedInitialLoad) {
+      content = <View style={{ height: 180, backgroundColor: colors.background }} />;
+    } else if (showCheckinCard || lastSubmittedMood) {
+      content = HeaderContent;
+    }
+
+    if (!content) return null;
 
     return (
       <Animated.View
@@ -286,55 +356,13 @@ export default function CommunityFeedScreen() {
             inputRange: [0, 160],
             outputRange: [1, 0],
             extrapolate: 'clamp'
-          }),
-          // Move up slightly to create subtle parallax that feels like scrolling away
-          transform: [{
-            translateY: scrollY.interpolate({
-              inputRange: [0, 160],
-              outputRange: [0, -40], 
-              extrapolate: 'clamp'
-            })
-          }]
+          })
         }}
       >
-        {showCheckinCard ? (
-          <MoodCheckInCard
-            onMoodSelect={handleMoodSelect}
-            onHeaderPress={() => setShowCheckinSheet(true)}
-            scrollY={scrollY}
-          />
-        ) : (
-          <View style={styles.actionCardContainer}>
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => router.push('/pulse')}
-            >
-              <View style={styles.actionCardContent}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                  <Text style={styles.actionCardTitle}>Your mood today: </Text>
-                  {lastSubmittedMood && (
-                    <View style={{ marginHorizontal: 4 }}>
-                      <MoodIcon 
-                        tag={lastSubmittedMood} 
-                        color={MOODS.find(m => m.tag === lastSubmittedMood)?.color || colors.primary} 
-                        selected={true} 
-                        size={14} 
-                      />
-                    </View>
-                  )}
-                  <Text style={styles.actionCardTitle}>
-                    {lastSubmittedMood ? lastSubmittedMood.charAt(0).toUpperCase() + lastSubmittedMood.slice(1) : ''}
-                  </Text>
-                </View>
-                <Text style={styles.actionCardSubtitle}>See your pulse insights</Text>
-              </View>
-              <TrendingUp size={20} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-        )}
+        {content}
       </Animated.View>
     );
-  }, [showCheckinCard, lastSubmittedMood, scrollY, handleMoodSelect]);
+  }, [HeaderContent, isCheckinStatusLoading, hasCompletedInitialLoad, showCheckinCard, lastSubmittedMood, scrollY]);
 
 
   const handleCreatePost = async (dto: any) => {
@@ -343,10 +371,8 @@ export default function CommunityFeedScreen() {
       
       if (newPostId) {
         setIsCreatePostOpen(false);
-        // Small delay to ensure the store has finished its internal updates before navigation
-        setTimeout(() => {
-          router.push(`/post/${newPostId}`);
-        }, 100);
+        // Use safeNavigate to ensure we don't double-navigate
+        safeNavigate(`/post/${newPostId}`);
       }
     } catch (e:any) {
       crashlytics().recordError(e);
@@ -499,17 +525,33 @@ export default function CommunityFeedScreen() {
         )}
 
 
-        {/* Shimmer on cold start OR when filtering (empty and loading) */}
-        {(loading && posts.length === 0) ? (
-          <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ flex: 1 }}>
+        {/* SHIMMER LAYER (Fades out) */}
+        {!hasCompletedInitialLoad && (
+          <Animated.View 
+            style={[
+              StyleSheet.absoluteFill, 
+              { 
+                backgroundColor: colors.background,
+                zIndex: 10,
+                opacity: feedFadeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 0]
+                })
+              }
+            ]}
+          >
             {[1, 2, 3, 4].map((key) => (
               <React.Fragment key={key}>
                 <FeedPostShimmer />
                 <View style={{ height: 2, backgroundColor: colors.borderLight }} />
               </React.Fragment>
             ))}
-          </View>
-        ) : (
+          </Animated.View>
+        )}
+
+        {/* CONTENT LAYER (Fades in) */}
+        <Animated.View style={{ flex: 1, opacity: feedFadeAnim }}>
           <Animated.FlatList
             ref={flatListRef}
             data={posts}
@@ -518,10 +560,6 @@ export default function CommunityFeedScreen() {
               [{ nativeEvent: { contentOffset: { y: scrollY } } }],
               { useNativeDriver: true }
             )}
-            maintainVisibleContentPosition={{
-              minIndexForVisible: 0,
-              autoscrollToTopThreshold: 10,
-            }}
             scrollEventThrottle={16}
             keyExtractor={(item) => (item as any)._stableKey || item.id || `temp-${item.created_at}`}
             initialNumToRender={10}
@@ -575,7 +613,8 @@ export default function CommunityFeedScreen() {
               ) : null
             }
           />
-        )}
+        </Animated.View>
+      </View>
       </View>
 
 
