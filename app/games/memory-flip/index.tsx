@@ -28,7 +28,8 @@ import {
     ChevronDown,
     LayoutGrid,
     Layers,
-    Gamepad2
+    Gamepad2,
+    Info
 } from 'lucide-react-native';
 import { formatNumber } from '@/utils/format';
 import { colors, spacing, borderRadius, typography } from '../../../constants/theme';
@@ -230,7 +231,7 @@ export default function MemoryFlipHome() {
                         )
                     `)
                     .eq('game_id', gameData.id)
-                    .order('highest_score', { ascending: false })
+                    .order('total_score', { ascending: false })
                     .limit(10);
 
                 if (lbData) {
@@ -256,7 +257,7 @@ export default function MemoryFlipHome() {
                             .from('game_user_stats')
                             .select('*', { count: 'exact', head: true })
                             .eq('game_id', gameData.id)
-                            .gt('highest_score', statsData.highest_score || 0);
+                            .gt('total_score', statsData.total_score || 0);
                         
                         rank = (count || 0) + 1;
                     }
@@ -348,7 +349,7 @@ export default function MemoryFlipHome() {
                 {/* Daily Streak Section */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Daily Progress</Text>
+                        <Text style={styles.sectionTitle}>Weekly Streak</Text>
                         {userStats?.streak_days ? (
                             <View style={styles.streakInfo}>
                                 <Star size={14} color="#F59E0B" fill="#F59E0B" />
@@ -388,7 +389,15 @@ export default function MemoryFlipHome() {
                                     <Text style={styles.motivationText}>Sharp mind! You've secured your streak for today. Keep flipping! 🧠</Text>
                                 </View>
                             ) : (
-                                <Text style={styles.emptyStreakMsg}>Start playing today to build your streak! ✨</Text>
+                                <View style={{ marginTop: spacing.md }}>
+                                    <Text style={styles.emptyStreakMsg}>Start playing today to build your streak! ✨</Text>
+                                    <View style={styles.streakInfoBoxInline}>
+                                        <Info size={14} color="#6E75EF" />
+                                        <Text style={styles.streakInfoTextInline}>
+                                            Streaks are only counted as continuous days. Breaking a day in the middle will reset your streak progress.
+                                        </Text>
+                                    </View>
+                                </View>
                             )}
                         </>
                     )}
@@ -457,6 +466,7 @@ export default function MemoryFlipHome() {
                                 <Text style={styles.instructionDesc}>You have 60 seconds to clear the grid and secure your place on the leaderboard.</Text>
                             </View>
                         </View>
+
 
                         {!isHowToPlayExpanded && (
                             <>
@@ -1053,4 +1063,22 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
     },
+    streakInfoBoxInline: {
+        flexDirection: 'row',
+        backgroundColor: "#6E75EF" + "10",
+        padding: spacing.md,
+        borderRadius: borderRadius.md,
+        marginTop: spacing.md,
+        borderWidth: 1,
+        borderColor: "#6E75EF" + "20",
+        alignItems: 'center',
+        gap: 10,
+    },
+    streakInfoTextInline: {
+        fontSize: 12,
+        color: "#6E75EF",
+        lineHeight: 18,
+        flex: 1,
+        fontWeight: '600',
+    }
 });

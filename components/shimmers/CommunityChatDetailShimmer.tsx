@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
         borderBottomWidth: 1,
-        borderBottomColor: colors.borderLight,
+        borderBottomColor: colors.border,
         backgroundColor: colors.background,
     },
     backButton: {
@@ -122,20 +122,20 @@ const styles = StyleSheet.create({
         height: 36,
         borderRadius: 18,
         marginRight: 10,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
     },
     headerTitle: {
         width: 120,
         height: 14,
         borderRadius: 4,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         marginBottom: 6,
     },
     headerSubtitle: {
         width: 80,
         height: 10,
         borderRadius: 4,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
     },
     messagesContainer: {
         flex: 1,
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
         height: 30,
         borderRadius: 15,
         marginRight: 8,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
     },
     bubble: {
         maxWidth: '80%',
@@ -168,12 +168,12 @@ const styles = StyleSheet.create({
     },
     theirBubble: {
         borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderColor: colors.border,
         borderBottomLeftRadius: 4,
         backgroundColor: colors.surface + "30",
     },
     myBubble: {
-        backgroundColor: colors.borderLight, // Simulating standard sent message block
+        backgroundColor: colors.border, // Simulating standard sent message block
         borderBottomRightRadius: 4,
     },
     nameLine: {
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
         paddingBottom: 20, // To account for safe area
         backgroundColor: colors.background,
         borderTopWidth: 1,
-        borderTopColor: colors.borderLight,
+        borderTopColor: colors.border,
     },
     inputContainer: {
         flexDirection: 'row',
@@ -222,12 +222,12 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         backgroundColor: colors.surface,
         borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderColor: colors.border,
     },
     sendButtonSkeleton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
     },
 });

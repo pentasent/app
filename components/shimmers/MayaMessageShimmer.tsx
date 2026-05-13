@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginRight: 10,
         borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderColor: colors.border,
     },
     bubble: {
         backgroundColor: colors.surface,
@@ -60,20 +60,20 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         borderBottomLeftRadius: 4,
         borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderColor: colors.border,
         width: '60%',
         gap: 8,
     },
     lineLong: {
         width: '100%',
         height: 12,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         borderRadius: 6,
     },
     lineMedium: {
         width: '60%',
         height: 12,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         borderRadius: 6,
     }
 });

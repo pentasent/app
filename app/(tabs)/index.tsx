@@ -84,7 +84,8 @@ export default function CommunityFeedScreen() {
   const verticalText = "CHECKIN".split("").join("\n");
  
   // Unified Direct Loading: Shimmer on first cold-load, Direct on return.
-  const [hasCompletedInitialLoad, setHasCompletedInitialLoad] = useState(isFeedAlreadyLoaded);
+  // CRITICAL: We only skip shimmer if we ALREADY have data in the store.
+  const [hasCompletedInitialLoad, setHasCompletedInitialLoad] = useState(isFeedAlreadyLoaded && posts.length > 0);
 
   useEffect(() => {
     // 1. LOADING START: If we start loading and have no posts (e.g. filter change), 
@@ -124,7 +125,7 @@ export default function CommunityFeedScreen() {
     }, 500);
   };
   const [hasUserScrolled, setHasUserScrolled] = useState(false);
-  const feedFadeAnim = useRef(new Animated.Value(isFeedAlreadyLoaded ? 1 : 0)).current;
+  const feedFadeAnim = useRef(new Animated.Value((isFeedAlreadyLoaded && posts.length > 0) ? 1 : 0)).current;
 
   useEffect(() => {
     const id = scrollY.addListener(({ value }) => {

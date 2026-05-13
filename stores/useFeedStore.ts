@@ -14,6 +14,7 @@ interface FeedState {
   hasMorePosts: boolean;
   pendingPostsCount: number;
   lastNewPostTimestamp: number | null;
+  processingLikes: Set<string>;
   communities: Community[];
   channels: Channel[];
   selectedCommunityId: string | null;
@@ -31,10 +32,11 @@ interface FeedState {
   removePost: (id: string) => void;
   resetPendingPosts: () => void;
   incrementPendingPosts: () => void;
+  setProcessingLike: (postId: string, isProcessing: boolean) => void;
   
   // Async Actions
-  fetchPosts: (isRefresh?: boolean, silent?: boolean) => Promise<void>;
-  loadMorePosts: () => Promise<void>;
+  fetchPosts: (userId?: string, isRefresh?: boolean, silent?: boolean) => Promise<void>;
+  loadMorePosts: (userId?: string) => Promise<void>;
   fetchCommunitiesAndChannels: (userId: string) => Promise<void>;
   createPostAction: (user: any, dto: CreatePostDTO, communities: Community[]) => Promise<string>;
   likePostAction: (userId: string, postId: string) => Promise<void>;
@@ -53,6 +55,14 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   hasMorePosts: true,
   pendingPostsCount: 0,
   lastNewPostTimestamp: null,
+  processingLikes: new Set(),
+
+  setProcessingLike: (postId, isProcessing) => set((state) => {
+    const newSet = new Set(state.processingLikes);
+    if (isProcessing) newSet.add(postId);
+    else newSet.delete(postId);
+    return { processingLikes: newSet };
+  }),
   communities: [],
   channels: [],
   selectedCommunityId: null,
@@ -64,7 +74,6 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   
   setSelectedCommunityId: (id) => {
     set({ selectedCommunityId: id, posts: [], hasMorePosts: true, lastCursor: null, loading: true });
-    get().fetchPosts();
   },
 
   updatePost: (id, updates) => set((state) => ({
@@ -89,11 +98,24 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     lastNewPostTimestamp: state.pendingPostsCount === 0 ? Date.now() : state.lastNewPostTimestamp
   })),
 
-  fetchPosts: async (isRefresh = false, silent = false) => {
+  fetchPosts: async (userId, isRefresh = false, silent = false) => {
     const state = get();
     try {
-        if (isRefresh && !silent) set({ refreshing: true });
-        else if (!silent) set({ loading: true });
+        // Robust Loading Logic: 
+        // 1. If it's a refresh, show refreshing indicator.
+        // 2. If we have NO posts yet, we MUST show the primary loading shimmer, even if it's technically a refresh.
+        // This prevents the "No posts found" message from flashing on initial load or community change.
+        if (isRefresh && !silent) {
+            // If we have posts, show the native pull-to-refresh spinner.
+            // If we have NO posts, we skip the spinner and show the full-screen shimmer instead.
+            if (state.posts.length > 0) {
+                set({ refreshing: true });
+            } else {
+                set({ loading: true });
+            }
+        } else if (!silent) {
+            set({ loading: true });
+        }
 
         if (isRefresh) {
             set({ lastCursor: null });
@@ -118,7 +140,24 @@ export const useFeedStore = create<FeedState>((set, get) => ({
         const { data, error } = await query;
         if (error) throw error;
 
-        const newPosts = data || [];
+        let newPosts = data || [];
+
+        // Fetch user liked status if userId is provided
+        if (userId && newPosts.length > 0) {
+            const postIds = newPosts.map(p => p.id);
+            const { data: userLikes } = await supabase
+                .from('likes')
+                .select('post_id')
+                .in('post_id', postIds)
+                .eq('user_id', userId);
+
+            const likedIds = new Set(userLikes?.map(l => l.post_id) || []);
+            newPosts = newPosts.map(p => ({
+                ...p,
+                user_has_liked: likedIds.has(p.id)
+            }));
+        }
+
         const nextCursor = newPosts.length > 0 ? newPosts[newPosts.length - 1].created_at : null;
 
         set((s) => ({
@@ -136,11 +175,11 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     }
   },
 
-  loadMorePosts: async () => {
+  loadMorePosts: async (userId) => {
     const { hasMorePosts, loadingMore, loading, refreshing } = get();
     if (!hasMorePosts || loadingMore || loading || refreshing) return;
     set({ loadingMore: true });
-    await get().fetchPosts(false, true);
+    await get().fetchPosts(userId, false, true);
     set({ loadingMore: false });
   },
 
@@ -163,25 +202,52 @@ export const useFeedStore = create<FeedState>((set, get) => ({
 
   likePostAction: async (userId, postId) => {
       const state = get();
+      if (state.processingLikes.has(postId)) return;
+      
       const post = state.posts.find(p => p.id === postId);
       if (!post) return;
 
-      const isLiked = post.user_has_liked;
-      const newCount = isLiked ? Math.max(0, (post.likes_count || 0) - 1) : (post.likes_count || 0) + 1;
+      state.setProcessingLike(postId, true);
+      const isLiked = !!post.user_has_liked;
+      const optimisticCount = isLiked ? Math.max(0, (post.likes_count || 0) - 1) : (post.likes_count || 0) + 1;
 
-      // Optimistic
-      state.updatePost(postId, { likes_count: newCount, user_has_liked: !isLiked });
+      // 1. Optimistic UI Update
+      state.updatePost(postId, { likes_count: optimisticCount, user_has_liked: !isLiked });
 
       try {
           if (isLiked) {
-              await supabase.from('likes').delete().eq('post_id', postId).eq('user_id', userId);
-              await supabase.from('posts').update({ likes_count: newCount }).eq('id', postId);
+              // UNLIKE flow
+              const { error: delError } = await supabase.from('likes').delete().eq('post_id', postId).eq('user_id', userId);
+              if (delError) throw delError;
           } else {
-              await supabase.from('likes').insert({ post_id: postId, user_id: userId });
-              await supabase.from('posts').update({ likes_count: newCount }).eq('id', postId);
+              // LIKE flow
+              // Use upsert or check-then-insert to be safe
+              const { error: insError } = await supabase.from('likes').upsert({ post_id: postId, user_id: userId }, { onConflict: 'post_id,user_id' });
+              if (insError && insError.code !== '23505') throw insError; // 23505 is unique violation, which we can ignore
+          }
+
+          // 2. Fetch the authoritative count from the DB to resolve any race conditions
+          const { count, error: countError } = await supabase
+              .from('likes')
+              .select('*', { count: 'exact', head: true })
+              .eq('post_id', postId);
+          
+          if (!countError && count !== null) {
+              // 3. Update the post's likes_count in the DB to match reality
+              await supabase.from('posts').update({ likes_count: count }).eq('id', postId);
+              
+              // 4. Final state sync
+              state.updatePost(postId, { 
+                  likes_count: count, 
+                  user_has_liked: !isLiked 
+              });
           }
       } catch (e) {
+          console.error('[LIKE-ACTION-ERROR]:', e);
+          // Revert on failure
           state.updatePost(postId, { likes_count: post.likes_count, user_has_liked: isLiked });
+      } finally {
+          state.setProcessingLike(postId, false);
       }
   },
 
@@ -253,7 +319,12 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   loadCache: async () => {
     try {
       const cached = await AsyncStorage.getItem('cached_feed_posts');
-      if (cached) set({ posts: JSON.parse(cached), loading: false });
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          set({ posts: parsed, loading: false });
+        }
+      }
     } catch (e) {}
   },
 

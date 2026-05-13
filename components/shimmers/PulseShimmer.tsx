@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface,
         borderRadius: borderRadius.xl,
         borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderColor: colors.border,
         padding: spacing.md,
         marginBottom: spacing.xl,
     },
@@ -125,19 +125,19 @@ const styles = StyleSheet.create({
     },
     statPlaceholder: {
         width: '30%',
-        height: 40,
-        backgroundColor: colors.borderLight,
+        height: 32,
+        backgroundColor: colors.border,
         borderRadius: 8,
     },
     shimmerLine: {
-        height: 14,
-        backgroundColor: colors.borderLight,
+        height: 10,
+        backgroundColor: colors.border,
         borderRadius: 4,
     },
     sectionHeader: {
         width: 140,
-        height: 20,
-        backgroundColor: colors.borderLight,
+        height: 18,
+        backgroundColor: colors.border,
         borderRadius: 4,
         marginBottom: spacing.md,
     },
@@ -145,39 +145,40 @@ const styles = StyleSheet.create({
         marginBottom: spacing.xl,
     },
     graphCard: {
-        height: 140,
+        height: 180, // Match actual graph card height
         backgroundColor: colors.surface,
         borderRadius: borderRadius.lg,
         borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderColor: colors.border,
         padding: spacing.md,
         marginBottom: spacing.md,
     },
     graphHeaderShimmer: {
         width: 100,
-        height: 14,
-        backgroundColor: colors.borderLight,
+        height: 12,
+        backgroundColor: colors.border,
         borderRadius: 4,
-        marginBottom: 20,
+        marginBottom: 30, // More breathing room like actual header
     },
     barsRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-end',
+        paddingHorizontal: 20, // Add some padding to match container
         flex: 1,
     },
     barShimmer: {
-        width: '10%',
-        height: 50,
-        backgroundColor: colors.borderLight,
-        borderRadius: 4,
+        width: 6, // Match actual bar width
+        height: 80, // Match actual bar height
+        backgroundColor: colors.border,
+        borderRadius: 3,
     },
     insightsCard: {
         padding: spacing.md,
         backgroundColor: colors.surface,
         borderRadius: borderRadius.xl,
         borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderColor: colors.border,
         marginBottom: spacing.xxl,
     },
     insightRow: {
@@ -189,7 +190,7 @@ const styles = StyleSheet.create({
         width: 6,
         height: 6,
         borderRadius: 3,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         marginRight: 10,
     }
 });

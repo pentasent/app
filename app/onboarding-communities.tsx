@@ -16,7 +16,7 @@ import crashlytics from '@/lib/crashlytics';
 import { useSession } from '@/contexts/SessionContext';
 
 export default function OnboardingCommunitiesScreen() {
-    const { user, refreshUser } = useAuth();
+    const { user, refreshUser, updateProfile } = useAuth();
     const { refreshFeed } = useFeed();
     const { setFeedAlreadyLoaded } = useSession();
     const router = useRouter();
@@ -244,13 +244,11 @@ export default function OnboardingCommunitiesScreen() {
             const { error: notificationError } = await supabase.from('notifications').insert(notifications);
             if (notificationError) console.log('[ERROR]:', "Notification error:", notificationError);
 
-            // Mark user as onboarded
-            const { error: updateError } = await supabase.from('users').update({ is_onboarded: true }).eq('id', user.id);
-            if (updateError) throw updateError;
+            // Mark user as onboarded using updateProfile for consistent state
+            await updateProfile({ is_onboarded: true });
 
-            // Successfully onboarded, refresh user context, feed context, and go to tabs
+            // Successfully onboarded
             trackEvent('onboarding_completed');
-            await refreshUser();
 
             // PRE-WARM FEED:
             // Explicitly fetch metadata and posts while the "Getting ready" screen is still visible

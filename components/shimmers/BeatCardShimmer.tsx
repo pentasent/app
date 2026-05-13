@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 const { width } = Dimensions.get('window');
 
 const ShimmerBox = ({ style, translateX }: { style: any, translateX: Animated.Value }) => (
-    <View style={[style, { backgroundColor: '#F5F5F5', overflow: 'hidden' }]}>
+    <View style={[style, { backgroundColor: colors.border, overflow: 'hidden' }]}>
         <Animated.View
             style={[
                 StyleSheet.absoluteFill,
@@ -16,7 +16,7 @@ const ShimmerBox = ({ style, translateX }: { style: any, translateX: Animated.Va
             ]}
         >
             <LinearGradient
-                colors={['#F5F5F5', '#FFFFFF', '#F5F5F5']}
+                colors={[colors.border, '#FFFFFF', colors.border]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={StyleSheet.absoluteFill}

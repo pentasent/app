@@ -306,10 +306,10 @@ export default function BubbleRushPlay() {
                     });
 
                 if (sessionError) throw sessionError;
-                console.log('[GAME_END] Session stored successfully for score:', finalSessionScore);
+                // console.log('[GAME_END] Session stored successfully for score:', finalSessionScore);
 
                 // 3. Update User Stats (High Fidelity Aggregation)
-                console.log('[STATS] Fetching existing stats for user:', user.id, 'game:', gameId);
+                // console.log('[STATS] Fetching existing stats for user:', user.id, 'game:', gameId);
                 const { data: existingStats, error: statsFetchError } = await supabase
                     .from('game_user_stats')
                     .select('*')
@@ -323,7 +323,7 @@ export default function BubbleRushPlay() {
 
                 let finalStats: any;
                 const currentSessionScore = Number(finalSessionScore) || 0;
-                console.log('[STATS] Current session score to add:', currentSessionScore);
+                // console.log('[STATS] Current session score to add:', currentSessionScore);
 
                 if (existingStats) {
                     console.log('[STATS] Found existing stats:', existingStats);
@@ -350,7 +350,7 @@ export default function BubbleRushPlay() {
 
                     if (updateError) console.error('[STATS] Update failed:', updateError);
                 } else {
-                    console.log('[STATS] No existing stats found. Creating new record.');
+                    // console.log('[STATS] No existing stats found. Creating new record.');
                     finalStats = {
                         user_id: user.id,
                         game_id: gameId,
@@ -362,7 +362,7 @@ export default function BubbleRushPlay() {
                         updated_at: new Date().toISOString()
                     };
 
-                    console.log('[STATS] Inserting new record:', finalStats);
+                    // console.log('[STATS] Inserting new record:', finalStats);
                     const { error: insertError } = await supabase
                         .from('game_user_stats')
                         .insert(finalStats);
@@ -373,7 +373,7 @@ export default function BubbleRushPlay() {
                 // 4. Update Local Cache Immediately
                 const SLUG = 'bubble-rush';
                 await AsyncStorage.setItem(`game_stats_${SLUG}_${user.id}`, JSON.stringify(finalStats));
-                console.log('[STATS] Success: Local cache and DB synchronized.');
+                // console.log('[STATS] Success: Local cache and DB synchronized.');
                 
                 // 5. Signal Dashboard Refresh
                 DeviceEventEmitter.emit('bubble_rush_refresh');

@@ -36,6 +36,7 @@ import {
   Edit2,
   Eye,
   BarChart2,
+  ChevronDown,
 } from 'lucide-react-native';
 import { CommentSection } from '../../components/feed/CommentSection';
 import { StatusBar } from 'expo-status-bar';
@@ -117,7 +118,7 @@ export default function PostDetailScreen() {
   const postId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const { user: currentUser, isAdmin } = useAuth(); // Use global auth state
-  const { posts, updatePost, removePost, deletePost } = useFeed(); // Access global feed context
+  const { posts, updatePost, removePost, deletePost, likePost } = useFeed(); // Access global feed context
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
@@ -164,6 +165,14 @@ export default function PostDetailScreen() {
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const [imageRatios, setImageRatios] = useState<{ [key: string]: number }>({});
   const hasIncrementedView = useRef(false);
+
+  // Comment Pagination State
+  const [commentPage, setCommentPage] = useState(0);
+  const [hasMoreComments, setHasMoreComments] = useState(() => {
+    const cached = posts.find((p) => p.id === postId || (p as any)._tempId === postId);
+    return cached ? (cached.comments_count || 0) > COMMENTS_PER_PAGE : true;
+  });
+  const COMMENTS_PER_PAGE = 10;
 
   // Cinematic Transitions
   const screenFade = useRef(new Animated.Value(0)).current;
@@ -287,20 +296,29 @@ export default function PostDetailScreen() {
       setLoading(true);
     } else {
       setLoading(false);
-      // Even if post is cached, comments might not be
-      if (!comments || comments.length === 0) {
+      // Only show comments shimmer if we actually expect comments
+      if ((!comments || comments.length === 0) && (cached.comments_count || 0) > 0) {
         setCommentsLoading(true);
+      } else {
+        setCommentsLoading(false);
       }
     }
     
     if (!hasIncrementedView.current) {
-        hasIncrementedView.current = true;
-        if (!post && cached) setPost(cached);
+      hasIncrementedView.current = true;
+      if (!post && cached) setPost(cached);
     }
 
-    setCommentsLoading(true);
+    // Only start comments loading shimmer if we don't know the count yet, or if we know it's > 0
+    if (!cached || (cached.comments_count || 0) > 0) {
+      setCommentsLoading(true);
+    }
 
     try {
+      // Reset pagination on full fetch
+      setCommentPage(0);
+      setHasMoreComments((cached?.comments_count || 0) > COMMENTS_PER_PAGE);
+
       // Fetch Post
       const { data: postData, error: postError } = await supabase
         .from('posts')
@@ -341,78 +359,70 @@ export default function PostDetailScreen() {
       });
       setEditTitle(postData.title || '');
       setEditContent(parseContent(postData.content));
+      setHasMoreComments((postData.comments_count || 0) > COMMENTS_PER_PAGE);
 
-      // Fetch Comments
-      const { data: commentsData, error: commentsError } = await supabase
-        .from('comments')
-        .select(
-          `
-            *,
-            user:users(id, name, avatar_url),
-            replies:comments(
-                *,
-                user:users(id, name, avatar_url)
-            )
-        `,
-        )
-        .eq('post_id', postId)
-        .is('parent_comment_id', null)
-        .order('created_at', { ascending: true });
-
-      if (commentsError) throw commentsError;
-
-      // Real total comment count for sync
-      const { count: realCount, error: countError } = await supabase
+      // Fetch Comments ONLY if there are actually comments to fetch
+      if (postData.comments_count > 0) {
+        const { data: commentsData, error: commentsError } = await supabase
           .from('comments')
-          .select('*', { count: 'exact', head: true })
-          .eq('post_id', postId);
+          .select(
+            `
+              *,
+              user:users(id, name, avatar_url),
+              replies:comments(
+                  *,
+                  user:users(id, name, avatar_url)
+              )
+          `,
+          )
+          .eq('post_id', postId)
+          .is('parent_comment_id', null)
+          .order('created_at', { ascending: true })
+          .range(0, COMMENTS_PER_PAGE - 1);
 
-      if (!countError && realCount !== null && postData) {
-          // If mismatch detected, sync it silently
-          if (realCount !== postData.comments_count) {
-              await supabase.from('posts').update({ comments_count: realCount }).eq('id', postId);
-              postData.comments_count = realCount;
-              updatePost(postId, { comments_count: realCount });
+        if (commentsError) throw commentsError;
+
+        setHasMoreComments(commentsData.length === COMMENTS_PER_PAGE);
+
+        let formattedComments = (commentsData as any[]).map((c) => ({
+          ...c,
+          replies: c.replies || [],
+        }));
+
+        // Calculate user_has_liked for comments
+        if (currentUser && formattedComments.length > 0) {
+          const allCommentIds: string[] = [];
+          formattedComments.forEach((c: any) => {
+            allCommentIds.push(c.id);
+            if (c.replies) {
+              c.replies.forEach((r: any) => allCommentIds.push(r.id));
+            }
+          });
+
+          if (allCommentIds.length > 0) {
+            const { data: clData } = await supabase
+              .from('comment_likes')
+              .select('comment_id')
+              .eq('user_id', currentUser.id)
+              .in('comment_id', allCommentIds);
+
+            const likedCommentIds = new Set(clData?.map((l) => l.comment_id));
+
+            formattedComments = formattedComments.map((c) => ({
+              ...c,
+              user_has_liked: likedCommentIds.has(c.id),
+              replies: c.replies.map((r: any) => ({
+                ...r,
+                user_has_liked: likedCommentIds.has(r.id),
+              })),
+            }));
           }
-      }
-
-      let formattedComments = (commentsData as any[]).map((c) => ({
-        ...c,
-        replies: c.replies || [],
-      }));
-
-      // Calculate user_has_liked for comments
-      if (currentUser && formattedComments.length > 0) {
-        // Flatten comment IDs to check likes (including replies)
-        const allCommentIds: string[] = [];
-        formattedComments.forEach((c: any) => {
-          allCommentIds.push(c.id);
-          if (c.replies) {
-            c.replies.forEach((r: any) => allCommentIds.push(r.id));
-          }
-        });
-
-        if (allCommentIds.length > 0) {
-          const { data: clData } = await supabase
-            .from('comment_likes')
-            .select('comment_id')
-            .eq('user_id', currentUser.id)
-            .in('comment_id', allCommentIds);
-
-          const likedCommentIds = new Set(clData?.map((l) => l.comment_id));
-
-          formattedComments = formattedComments.map((c) => ({
-            ...c,
-            user_has_liked: likedCommentIds.has(c.id),
-            replies: c.replies.map((r: any) => ({
-              ...r,
-              user_has_liked: likedCommentIds.has(r.id),
-            })),
-          }));
         }
+        setComments(formattedComments);
+      } else {
+        setComments([]);
+        setHasMoreComments(false);
       }
-
-      setComments(formattedComments);
     } catch (error: any) {
       console.log('[ERROR]:', 'Error fetching post details:', error);
       crashlytics().recordError(error);
@@ -449,8 +459,89 @@ export default function PostDetailScreen() {
     }
   };
 
+  const loadMoreComments = async () => {
+      if (!hasMoreComments || submitting) return;
+      const nextPage = commentPage + 1;
+      const start = nextPage * COMMENTS_PER_PAGE;
+      const end = start + COMMENTS_PER_PAGE - 1;
+
+      try {
+          const { data, error } = await supabase
+            .from('comments')
+            .select(`
+                *,
+                user:users(id, name, avatar_url),
+                replies:comments(
+                    *,
+                    user:users(id, name, avatar_url)
+                )
+            `)
+            .eq('post_id', postId)
+            .is('parent_comment_id', null)
+            .order('created_at', { ascending: true })
+            .range(start, end);
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+              let newFormatted = (data as any[]).map(c => ({ ...c, replies: c.replies || [] }));
+              
+              // Handle likes for new comments
+              if (currentUser) {
+                  const newIds: string[] = [];
+                  newFormatted.forEach(c => {
+                      newIds.push(c.id);
+                      c.replies?.forEach((r: any) => newIds.push(r.id));
+                  });
+
+                  if (newIds.length > 0) {
+                      const { data: clData } = await supabase
+                        .from('comment_likes')
+                        .select('comment_id')
+                        .eq('user_id', currentUser.id)
+                        .in('comment_id', newIds);
+                      
+                      const likedSet = new Set(clData?.map(l => l.comment_id));
+                      newFormatted = newFormatted.map(c => ({
+                          ...c,
+                          user_has_liked: likedSet.has(c.id),
+                          replies: c.replies.map((r: any) => ({ ...r, user_has_liked: likedSet.has(r.id) }))
+                      }));
+                  }
+              }
+
+              setComments(prev => [...prev, ...newFormatted]);
+              setCommentPage(nextPage);
+              setHasMoreComments(data.length === COMMENTS_PER_PAGE);
+          } else {
+              setHasMoreComments(false);
+          }
+      } catch (e) {
+          console.error("Error loading more comments:", e);
+      }
+  };
+
+  const handleTextChange = (text: string) => {
+    const words = text.trim().split(/\s+/);
+    if (words.length > 100 && text.length > newComment.length) {
+      setToastType("error");
+      setToastMsg('Maximum 100 words allowed.');
+      return;
+    }
+    setNewComment(text);
+  };
+
   const handleAddComment = async () => {
     if (!newComment.trim() || submitting) return;
+    
+    // Word count validation (Max 100 words)
+    const words = newComment.trim().split(/\s+/);
+    if (words.length > 100) {
+        setToastType("error");
+        setToastMsg('Comment is too long. Maximum 100 words allowed.');
+        return;
+    }
+
     if (isUploadingPost || (realPostId && realPostId.startsWith("temp-"))) {
       setToastType("error");
       setToastMsg('Please wait for the post to finish uploading.');
@@ -566,59 +657,8 @@ export default function PostDetailScreen() {
       return;
     }
 
-    const isLiked = currentPost.user_has_liked;
-    const newLikesCount = isLiked
-      ? Math.max(0, currentPost.likes_count - 1)
-      : currentPost.likes_count + 1;
-
-    // Optimistic update local state
-    setPost((prev) =>
-      prev
-        ? { ...prev, likes_count: newLikesCount, user_has_liked: !isLiked }
-        : null,
-    );
-
-    // Sync with GLOBAL FEED
-    updatePost(realPostId, {
-      likes_count: newLikesCount,
-      user_has_liked: !isLiked,
-    });
-
-    try {
-      if (isLiked) {
-        await supabase
-          .from('likes')
-          .delete()
-          .eq('post_id', realPostId)
-          .eq('user_id', currentUser.id);
-        // Manually update post count
-        await supabase
-          .from('posts')
-          .update({ likes_count: Math.max(0, currentPost.likes_count - 1) })
-          .eq('id', realPostId);
-      } else {
-        const { data: existing } = await supabase
-          .from('likes')
-          .select('id')
-          .eq('post_id', realPostId)
-          .eq('user_id', currentUser.id)
-          .maybeSingle();
-        if (!existing) {
-          await supabase
-            .from('likes')
-            .insert({ post_id: realPostId, user_id: currentUser.id });
-          // Manually update post count
-          await supabase
-            .from('posts')
-            .update({ likes_count: currentPost.likes_count + 1 })
-            .eq('id', realPostId);
-        }
-      }
-    } catch (error) {
-      console.log('[ERROR]:', 'Like error', error);
-      crashlytics().recordError(error as any);
-      // Revert on error could be added here
-    }
+    // Use the centralized logic from FeedContext
+    await likePost(realPostId);
   };
 
   const handleLikeComment = async (commentId: string) => {
@@ -738,37 +778,53 @@ export default function PostDetailScreen() {
         }
       } else if (deleteTarget.type === 'comment' && deleteTarget.id) {
         const commentId = deleteTarget.id;
-        await supabase.from('comments').delete().eq('id', commentId);
+        
+        // 1. Database Sync: Handle all foreign key dependencies manually
+        // Step A: Handle Replies and their likes
+        const { data: replies } = await supabase.from('comments').select('id').eq('parent_comment_id', commentId);
+        const replyIds = replies?.map(r => r.id) || [];
+        
+        if (replyIds.length > 0) {
+            // Delete likes for all replies
+            await supabase.from('comment_likes').delete().in('comment_id', replyIds);
+            // Delete the replies themselves
+            await supabase.from('comments').delete().in('id', replyIds);
+        }
+        
+        // Step B: Delete likes for the main comment
+        await supabase.from('comment_likes').delete().eq('comment_id', commentId);
+        
+        // Step C: Finally delete the comment itself
+        const { error: deleteError } = await supabase.from('comments').delete().eq('id', commentId);
+        if (deleteError) throw deleteError;
 
-        // Optimistic Remove
-        const removeComment = (list: Comment[]): Comment[] => {
+        // 2. Optimistic UI Remove
+        const removeCommentFromList = (list: Comment[]): Comment[] => {
           return list
             .filter((c) => c.id !== commentId)
             .map((c) => ({
               ...c,
-              replies: c.replies ? removeComment(c.replies) : [],
+              replies: c.replies ? removeCommentFromList(c.replies) : [],
             }));
         };
-        setComments((current) => removeComment(current));
+        setComments((current) => removeCommentFromList(current));
 
-        // Update post comments count
+        // 3. Update post comments count in DB and UI
         if (currentPost) {
+          const totalDeleted = 1 + replyIds.length;
+          const newCount = Math.max(0, (currentPost.comments_count || 0) - totalDeleted);
+          
           await supabase
             .from('posts')
-            .update({
-              comments_count: Math.max(0, currentPost.comments_count - 1),
-            })
+            .update({ comments_count: newCount })
             .eq('id', realPostId);
+
           setPost((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  comments_count: Math.max(0, prev.comments_count - 1),
-                }
-              : null,
+            prev ? { ...prev, comments_count: newCount } : null,
           );
-          // Sync with Global Feed
-          updatePost(realPostId, { comments_count: Math.max(0, currentPost.comments_count - 1) });
+          
+          // Sync with Global Feed Store
+          updatePost(realPostId, { comments_count: newCount });
         }
 
         setShowDeleteModal(false);
@@ -1293,15 +1349,29 @@ export default function PostDetailScreen() {
           <CommentSection
             comments={comments}
             isLoading={commentsLoading}
-            commentCount={currentPost.comments_count}
+            commentCount={currentPost?.comments_count}
             onLikeComment={handleLikeComment}
-            onReply={(comment) => setReplyingTo(comment)}
+            onReply={setReplyingTo}
             currentUserId={currentUser?.id}
             isAdmin={isAdmin}
-            onOptions={(comment) =>
-              setOptionsTarget({ type: 'comment', data: comment })
-            }
+            onOptions={(item) => setOptionsTarget({ type: 'comment', data: item })}
           />
+
+          {/* Load More Comments Button */}
+          {hasMoreComments && !commentsLoading && (
+            <TouchableOpacity 
+                style={styles.loadMoreContainer} 
+                onPress={loadMoreComments}
+                disabled={submitting}
+            >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.loadMoreText}>Load more comments</Text>
+                  <ChevronDown size={14} color={colors.primary} strokeWidth={3} />
+                </View>
+            </TouchableOpacity>
+          )}
+
+          <View style={{ height: 100 }} />
         </ScrollView>
 
         <KeyboardShiftView>
@@ -1331,7 +1401,7 @@ export default function PostDetailScreen() {
                   replyingTo ? 'Write a reply...' : 'Write a comment...'
                 }
                 value={newComment}
-                onChangeText={setNewComment}
+                onChangeText={handleTextChange}
                 placeholderTextColor={colors.textMuted}
                 multiline
                 editable={!submitting}
@@ -1762,4 +1832,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  loadMoreContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  loadMoreText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  }
 });

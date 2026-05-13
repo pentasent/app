@@ -46,9 +46,12 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     useEffect(() => {
-        if (!user) return;
+        if (!user) {
+            store.fetchPosts(); // Public feed if not logged in
+            return;
+        }
         store.fetchCommunitiesAndChannels(user.id);
-        store.fetchPosts(true, store.posts.length > 0);
+        store.fetchPosts(user.id, true, store.posts.length > 0);
     }, [user?.id]);
 
     // Real-time Subscription (Optimized: Scoped to selected community or followed list)
@@ -129,8 +132,15 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const refreshSinglePost = async (postId: string) => {
-        const { data } = await supabase.from('posts').select('*, user:users(id, name, avatar_url), community:communities(id, name, logo_url), images:post_images(*)').eq('id', postId).single();
-        if (data) store.updatePost(postId, data);
+        const { data: postData } = await supabase.from('posts').select('*, user:users(id, name, avatar_url), community:communities(id, name, logo_url), images:post_images(*)').eq('id', postId).single();
+        if (postData) {
+            let userHasLiked = false;
+            if (user) {
+                const { data: likeData } = await supabase.from('likes').select('id').eq('post_id', postId).eq('user_id', user.id).maybeSingle();
+                userHasLiked = !!likeData;
+            }
+            store.updatePost(postId, { ...postData, user_has_liked: userHasLiked });
+        }
     };
 
     const value: FeedContextType = {
@@ -139,9 +149,9 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         refreshing: store.refreshing,
         loadingMore: store.loadingMore,
         hasMorePosts: store.hasMorePosts,
-        onRefresh: () => store.fetchPosts(true),
-        refreshFeed: () => store.fetchPosts(true),
-        loadMorePosts: store.loadMorePosts,
+        onRefresh: () => store.fetchPosts(user?.id, true),
+        refreshFeed: () => store.fetchPosts(user?.id, true),
+        loadMorePosts: () => store.loadMorePosts(user?.id),
         createPost,
         likePost,
         updatePost: store.updatePost,
@@ -152,12 +162,15 @@ export const FeedProvider: React.FC<{ children: React.ReactNode }> = ({ children
         refreshSinglePost,
         pendingPostsCount: store.pendingPostsCount,
         resetPendingPosts: store.resetPendingPosts,
-        fetchPendingPosts: () => store.fetchPosts(true), // Simplified
+        fetchPendingPosts: () => store.fetchPosts(user?.id, true), // Simplified
         lastNewPostTimestamp: store.lastNewPostTimestamp,
         communities: store.communities,
         channels: store.channels,
         selectedCommunityId: store.selectedCommunityId,
-        setSelectedCommunityId: store.setSelectedCommunityId,
+        setSelectedCommunityId: (id) => {
+            store.setSelectedCommunityId(id);
+            store.fetchPosts(user?.id, true);
+        },
     };
 
     return (

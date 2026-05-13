@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const { width, height: screenHeight } = Dimensions.get('window');
 
 // Colors for a subtle, clean shimmer
-const BASE_COLOR = '#F5F5F5';
+const BASE_COLOR = colors.border;
 const HIGHLIGHT_COLOR = '#FFFFFF';
 
 const ShimmerBox = ({ style, translateX, children }: { style: any, translateX: Animated.Value, children?: React.ReactNode }) => (

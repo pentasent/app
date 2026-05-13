@@ -31,7 +31,7 @@ import { getImageUrl } from '@/utils/get-image-url';
 import crashlytics from '@/lib/crashlytics';
 
 export default function SetupProfileScreen() {
-    const { user, refreshUser } = useAuth();
+    const { user, refreshUser, updateProfile } = useAuth();
     const router = useRouter();
 //      useEffect(() => {
 //     const clearStorage = async () => {
@@ -108,33 +108,14 @@ export default function SetupProfileScreen() {
                 finalAvatarUrl = filename;
             }
 
-            // Upsert into public.users
-            const { error } = await supabase.from('users').upsert({
-                id: user.id,
-                email: user.email,
+            // Update profile using centralized updateProfile for consistent state
+            await updateProfile({
                 name: name.trim(),
-                country: country.label,
                 bio: bio.trim(),
-                avatar_url: finalAvatarUrl,
-                is_verified: true, // Should be true since they got past OTP
-                is_active: true
-            }, { onConflict: 'id' });
-
-            if (error) throw error;
-
-            // Welcome Notification
-            await supabase.from('notifications').insert({
-                user_id: user.id,
-                notification_type: 'system_announcement',
-                category: 'success',
-                title: 'Welcome to Pentasent!',
-                message: 'Your account is fully set up. Dive into your new communities and explore!',
-                is_seen: false,
-                is_active: true
+                country: country.label,
+                avatar_uri: avatarUrl || undefined, // avatar_uri is handled by updateProfile to upload
+                is_onboarded: false // Still need onboarding after profile setup
             });
-
-            // Update local context
-            await refreshUser();
 
         } catch (error: any) {
             crashlytics().recordError(error);

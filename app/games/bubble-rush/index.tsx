@@ -27,6 +27,7 @@ import {
     Clock,
     User,
     ChevronDown,
+    Info
 } from 'lucide-react-native';
 import { formatNumber } from '@/utils/format';
 import { colors, spacing, borderRadius, typography } from '../../../constants/theme';
@@ -224,7 +225,7 @@ export default function BubbleRushHome() {
                         )
                     `)
                     .eq('game_id', gameData.id)
-                    .order('highest_score', { ascending: false })
+                    .order('total_score', { ascending: false })
                     .limit(10);
 
                 if (lbData) {
@@ -250,7 +251,7 @@ export default function BubbleRushHome() {
                             .from('game_user_stats')
                             .select('*', { count: 'exact', head: true })
                             .eq('game_id', gameData.id)
-                            .gt('highest_score', statsData.highest_score || 0);
+                            .gt('total_score', statsData.total_score || 0);
                         
                         rank = (count || 0) + 1;
                     }
@@ -342,7 +343,7 @@ export default function BubbleRushHome() {
                 {/* Daily Streak Section (Shimmer) */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Daily Progress</Text>
+                        <Text style={styles.sectionTitle}>Weekly Streak</Text>
                         {userStats?.streak_days ? (
                             <View style={styles.streakInfo}>
                                 <Star size={14} color="#F59E0B" fill="#F59E0B" />
@@ -382,7 +383,15 @@ export default function BubbleRushHome() {
                                     <Text style={styles.motivationText}>Great job! You've secured your streak for today. Keep it up! 🔥</Text>
                                 </View>
                             ) : (
-                                <Text style={styles.emptyStreakMsg}>Start playing today to build your streak! ✨</Text>
+                                <View style={{ marginTop: spacing.md }}>
+                                    <Text style={styles.emptyStreakMsg}>Start playing today to build your streak! ✨</Text>
+                                    <View style={styles.streakInfoBoxInline}>
+                                        <Info size={14} color="#0083B0" />
+                                        <Text style={styles.streakInfoTextInline}>
+                                            Streaks are only counted as continuous days. Breaking a day in the middle will reset your streak progress.
+                                        </Text>
+                                    </View>
+                                </View>
                             )}
                         </>
                     )}
@@ -481,6 +490,7 @@ export default function BubbleRushHome() {
                                 <Text style={styles.instructionDesc}>You have 30 seconds to secure the highest score possible!</Text>
                             </View>
                         </View>
+
                         
                         {!isHowToPlayExpanded && (
                             <>
@@ -1106,4 +1116,22 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
     },
+    streakInfoBoxInline: {
+        flexDirection: 'row',
+        backgroundColor: "#0083B0" + "10",
+        padding: spacing.md,
+        borderRadius: borderRadius.md,
+        marginTop: spacing.md,
+        borderWidth: 1,
+        borderColor: "#0083B0" + "20",
+        alignItems: 'center',
+        gap: 10,
+    },
+    streakInfoTextInline: {
+        fontSize: 12,
+        color: "#0083B0",
+        lineHeight: 18,
+        flex: 1,
+        fontWeight: '600',
+    }
 });

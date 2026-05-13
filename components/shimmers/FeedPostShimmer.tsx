@@ -92,19 +92,19 @@ const styles = StyleSheet.create({
         height: 40,
         borderRadius: 20,
         marginRight: 10,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
     },
     nameShimmer: {
         width: 120,
         height: 15,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         borderRadius: 4,
         marginBottom: 6,
     },
     metaRowShimmer: {
         width: 80,
         height: 12,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         borderRadius: 4,
     },
     contentContainer: {
@@ -114,21 +114,21 @@ const styles = StyleSheet.create({
     titleShimmer: {
         width: '60%',
         height: 16,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         borderRadius: 4,
         marginBottom: 8,
     },
     bodyLineLong: {
         width: '100%',
         height: 14,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         borderRadius: 4,
         marginBottom: 6,
     },
     bodyLineShort: {
         width: '70%',
         height: 14,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         borderRadius: 4,
     },
     actionsContainer: {
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     actionTextShimmer: {
         width: 30,
         height: 14,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         borderRadius: 4,
     },
     moreButton: {

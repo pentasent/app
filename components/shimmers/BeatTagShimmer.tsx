@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
         width: 140,
         height: 70,
         borderRadius: borderRadius.lg,
-        backgroundColor: colors.borderLight,
+        backgroundColor: colors.border,
         overflow: 'hidden',
     },
     gradientPlaceholder: {

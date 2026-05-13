@@ -2,14 +2,14 @@
   "expo": {
     "name": "Pentasent",
     "slug": "pentasent",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "pentasent",
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FFFBF7"
+      "backgroundColor": "#F8F8F8"
     },
     "android": {
       "package": "com.pentasent.app",
@@ -24,11 +24,12 @@
       "permissions": [
         "INTERNET",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "com.google.android.gms.permission.AD_ID"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#FFFBF7"
+        "backgroundColor": "#F8F8F8"
       },
       "intentFilters": [
         {
@@ -70,7 +71,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FFFBF7",
+          "backgroundColor": "#F8F8F8",
           "image": "./assets/images/splash.png",
           "resizeMode": "contain"
         }

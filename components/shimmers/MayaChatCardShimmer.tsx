@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
         height: 56,
         justifyContent: 'center',
         borderWidth: 1,
-        borderColor: colors.borderLight,
+        borderColor: colors.border,
     },
     contentColumn: {
         flex: 1,
