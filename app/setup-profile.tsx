@@ -113,9 +113,25 @@ export default function SetupProfileScreen() {
                 name: name.trim(),
                 bio: bio.trim(),
                 country: country.label,
-                avatar_uri: avatarUrl || undefined, // avatar_uri is handled by updateProfile to upload
-                is_onboarded: false // Still need onboarding after profile setup
+                avatar_uri: avatarUrl || undefined, 
+                is_onboarded: false, // Still need onboarding after profile setup
+                is_verified: true, // User verified OTP before this step
+                is_active: true
             });
+
+            // Welcome Notification
+            await supabase.from('notifications').insert({
+                user_id: user.id,
+                notification_type: 'system_announcement',
+                category: 'success',
+                title: 'Welcome to Pentasent!',
+                message: 'Your account is fully set up. Dive into your new communities and explore!',
+                is_seen: false,
+                is_active: true
+            });
+
+            // Successfully set up profile, go to community onboarding
+            // router.replace('/onboarding-communities');
 
         } catch (error: any) {
             crashlytics().recordError(error);

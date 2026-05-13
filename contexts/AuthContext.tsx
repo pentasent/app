@@ -18,7 +18,15 @@ interface AuthContextType {
   setIsAdmin: (isAdmin: boolean) => void;
   setLoading: (loading: boolean) => void;
   refreshUser: () => Promise<void>;
-  updateProfile: (updates: { name?: string; bio?: string; country?: string; avatar_uri?: string; is_onboarded?: boolean }) => Promise<void>;
+  updateProfile: (updates: { 
+    name?: string; 
+    bio?: string; 
+    country?: string; 
+    avatar_uri?: string; 
+    is_onboarded?: boolean;
+    is_verified?: boolean;
+    is_active?: boolean;
+  }) => Promise<void>;
   register: (email: string, password: string, metadata?: any) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -194,7 +202,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateProfile = async (updates: { name?: string; bio?: string; country?: string; avatar_uri?: string; is_onboarded?: boolean }) => {
+  const updateProfile = async (updates: { 
+    name?: string; 
+    bio?: string; 
+    country?: string; 
+    avatar_uri?: string; 
+    is_onboarded?: boolean;
+    is_verified?: boolean;
+    is_active?: boolean;
+  }) => {
     if (!user?.id) throw new Error('Not authenticated');
 
     // Optimistic UI update
@@ -232,6 +248,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           country: updates.country !== undefined ? updates.country : (user as any).country,
           avatar_url,
           is_onboarded: updates.is_onboarded !== undefined ? updates.is_onboarded : (user as any).is_onboarded,
+          is_verified: updates.is_verified !== undefined ? updates.is_verified : (user as any).is_verified,
+          is_active: updates.is_active !== undefined ? updates.is_active : (user as any).is_active,
         })
         .eq('id', user.id);
 
